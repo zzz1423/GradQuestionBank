@@ -57,7 +57,7 @@
 ## Phase 5 - 数据管理与代码审查
 - [x] 后端 API：题库导入/导出（JSON 格式）
 - [ ] **[neon-postgres]** 数据库分支备份策略
-- [ ] **[coderabbit]** 全项目代码审查
+- [ ] **[coderabbit]** 全项目代码审查（需先安装 CLI：`winget install CodeRabbit.CLI`）
 - [ ] 根据审查结果修复问题
 
 ## Phase 6 - 优化与扩展（后期）
