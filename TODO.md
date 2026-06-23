@@ -4,20 +4,20 @@
 题库管理 + 知识点掌握度分析系统。核心流程：
 录入题目 → DeepSeek分析知识点 → 用户审核/调整 → 标记掌握情况 → 统计分析
 
-## 技术栈（已更新）
-- 前端：React + Vite（由 **build-web-apps** 插件负责设计与实现）
-- 后端：Python + Flask（纯 JSON API，不再渲染模板）
-- 数据库：Neon Postgres（由 **neon-postgres** 插件管理，支持分支备份）
-- 图表：Recharts 或 Chart.js
+## 技术栈
+- 前端：Bootstrap 5（已实现），后续迁移至 React + Vite（**build-web-apps** 插件）
+- 后端：Python + Flask
+- 数据库：SQLite（已实现），后续迁移至 Neon Postgres（**neon-postgres** 插件）
+- 图表：Chart.js
 - AI：DeepSeek API（知识点分析）
-- 代码审查：CodeRabbit（由 **coderabbit** 插件执行）
+- 代码审查：CodeRabbit（**coderabbit** 插件）
 
 ## 插件依赖
 | 插件 | 用途 | 触发时机 |
 |------|------|---------|
-| build-web-apps | 前端 UI 设计与实现 | Phase 1 前端搭建、UI 重构 |
-| neon-postgres | 数据库创建与管理 | Phase 1 数据库初始化 |
-| coderabbit | 代码质量审查 | Phase 5 代码审查 |
+| build-web-apps | 前端 UI 重构至 React | Phase 1 前端迁移 |
+| neon-postgres | 数据库迁移至云端 | Phase 1 数据库迁移 |
+| coderabbit | 代码质量审查 | Phase 5 |
 
 ## 数据设计
 - 三级结构：学科 → 章节 → 知识点
@@ -28,23 +28,23 @@
 ---
 
 ## Phase 1 - 项目骨架与基础设施
-- [ ] 初始化前后端分离项目结构
-- [ ] 后端：Flask API 项目（纯 JSON 接口，无模板渲染）
-- [ ] 前端：React + Vite 项目初始化
-- [ ] **[neon-postgres]** 创建 Neon Postgres 数据库，建表
-- [ ] 预置种子数据（政治 + 计算机408）
-- [ ] **[build-web-apps]** 设计并实现前端整体布局与导航
+- [x] 初始化 Flask 项目结构
+- [x] SQLite 数据库建表 + 预置种子数据（政治 + 计算机408）
+- [x] 基础页面布局（Bootstrap 5 侧边栏导航 + 10 个模板页面）
+- [x] v1.0.0 发布至 GitHub
+- [ ] 前端迁移至 React + Vite（待 build-web-apps 插件介入）
+- [ ] 数据库迁移至 Neon Postgres（待 neon-postgres 插件介入）
 
 ## Phase 2 - 学科知识体系管理
 - [ ] 后端 API：学科/章节/知识点 CRUD
-- [ ] **[build-web-apps]** 学科管理页面（列表 + 增删）
+- [ ] **[build-web-apps]** 学科管理页面
 - [ ] **[build-web-apps]** 章节管理页面
 - [ ] **[build-web-apps]** 知识点管理页面
 
 ## Phase 3 - 题目录入与知识点分析
 - [ ] 后端 API：题目 CRUD + DeepSeek 分析接口
 - [ ] **[build-web-apps]** 题目录入页面
-- [ ] **[build-web-apps]** 知识点审核页面（AI 分析结果 + 用户修改）
+- [ ] **[build-web-apps]** 知识点审核页面
 - [ ] 前后端联调
 
 ## Phase 4 - 掌握度标记与统计
@@ -56,7 +56,6 @@
 
 ## Phase 5 - 数据管理与代码审查
 - [ ] 后端 API：题库导入/导出（JSON 格式）
-- [ ] **[build-web-apps]** 导入/导出页面
 - [ ] **[neon-postgres]** 数据库分支备份策略
 - [ ] **[coderabbit]** 全项目代码审查
 - [ ] 根据审查结果修复问题
@@ -64,7 +63,7 @@
 ## Phase 6 - 优化与扩展（后期）
 - [ ] OCR 图片识别提取题目
 - [ ] 批量录入优化
-- [ ] DeepSeek API 调用缓存（避免重复分析相同题目）
+- [ ] DeepSeek API 调用缓存
 - [ ] 复习推荐算法
 
 ---
@@ -73,4 +72,5 @@
 | 日期 | 完成内容 |
 |------|---------|
 | 2026-06-23 | 项目启动，完成需求讨论与架构设计 |
-| 2026-06-23 | 引入插件体系：build-web-apps（前端）、neon-postgres（数据库）、coderabbit（审查）|
+| 2026-06-23 | 引入插件体系：build-web-apps、neon-postgres、coderabbit |
+| 2026-06-23 | v1.0.0 发布至 GitHub（Flask + SQLite + Bootstrap） |
