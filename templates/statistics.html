@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}统计分析{% endblock %}
+
+{% block content %}
+<h4 class="mb-4">统计分析</h4>
+
+<!-- Overall mastery distribution -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">掌握度分布</div>
+            <div class="card-body">
+                <canvas id="masteryChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">按学科掌握度</div>
+            <div class="card-body">
+                <canvas id="subjectChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Weak knowledge points ranking -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-exclamation-triangle text-warning"></i> 薄弱知识点排行
+    </div>
+    <div class="card-body p-0">
+        {% if weak_points %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>排名</th>
+                        <th>学科</th>
+                        <th>章节</th>
+                        <th>知识点</th>
+                        <th>题目数</th>
+                        <th>已掌握</th>
+                        <th>模糊</th>
+                        <th>完全不会</th>
+                        <th>掌握率</th>
+                        <th>薄弱指数</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for kp in weak_points[:20] %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td><span class="badge bg-primary">{{ kp.subject_name }}</span></td>
+                        <td>{{ kp.chapter_name }}</td>
+                        <td><strong>{{ kp.name }}</strong></td>
+                        <td>{{ kp.total }}</td>
+                        <td><span class="text-success">{{ kp.mastered }}</span></td>
+                        <td><span class="text-warning">{{ kp.fuzzy }}</span></td>
+                        <td><span class="text-danger">{{ kp.weak }}</span></td>
+                        <td>
+                            <div class="progress" style="min-width: 80px; height: 20px;">
+                                <div class="progress-bar bg-success" style="width: {{ kp.mastery_rate|int }}%">
+                                    {{ "%.0f"|format(kp.mastery_rate) }}%
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if kp.weakness_score > 0.6 %}
+                            <span class="badge bg-danger">{{ "%.2f"|format(kp.weakness_score) }}</span>
+                            {% elif kp.weakness_score > 0.3 %}
+                            <span class="badge bg-warning text-dark">{{ "%.2f"|format(kp.weakness_score) }}</span>
+                            {% else %}
+                            <span class="badge bg-success">{{ "%.2f"|format(kp.weakness_score) }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4">
+            暂无做题数据，录入题目并标记掌握度后将在此显示统计结果
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+// Mastery distribution pie chart
+const masteryData = {{ mastery_dist|tojson }};
+const masteryLabels = {0: '未标记', 1: '完全不会', 2: '模糊', 3: '已掌握'};
+const masteryColors = {0: '#6c757d', 1: '#dc3545', 2: '#ffc107', 3: '#198754'};
+
+if (masteryData.length > 0) {
+    new Chart(document.getElementById('masteryChart'), {
+        type: 'doughnut',
+        data: {
+            labels: masteryData.map(d => masteryLabels[d.mastery_level]),
+            datasets: [{
+                data: masteryData.map(d => d.count),
+                backgroundColor: masteryData.map(d => masteryColors[d.mastery_level]),
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+}
+
+// Subject stacked bar chart
+const subjectData = {{ subject_stats|tojson }};
+if (subjectData.length > 0) {
+    const subjects = [...new Set(subjectData.map(d => d.name))];
+    const levels = [1, 2, 3];
+    const levelLabels = {1: '完全不会', 2: '模糊', 3: '已掌握'};
+
+    const datasets = levels.map(level => ({
+        label: levelLabels[level],
+        data: subjects.map(name => {
+            const found = subjectData.find(d => d.name === name && d.mastery_level === level);
+            return found ? found.count : 0;
+        }),
+        backgroundColor: masteryColors[level],
+    }));
+
+    new Chart(document.getElementById('subjectChart'), {
+        type: 'bar',
+        data: { labels: subjects, datasets },
+        options: {
+            responsive: true,
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+}
+</script>
+{% endblock %}

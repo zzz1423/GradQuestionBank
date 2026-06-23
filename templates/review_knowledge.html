@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}审核知识点{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('question_detail', question_id=question.id) }}">第 {{ question.id }} 题</a></li>
+        <li class="breadcrumb-item active">审核知识点</li>
+    </ol>
+</nav>
+
+<h4 class="mb-4">审核知识点关联</h4>
+
+<div class="row">
+    <div class="col-md-7">
+        <!-- AI Analysis -->
+        <div class="card mb-3" id="analysis-card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-robot"></i> AI 分析</span>
+                <button class="btn btn-sm btn-outline-primary" id="btn-analyze" onclick="analyzeQuestion()">
+                    <i class="bi bi-stars"></i> 调用 DeepSeek 分析
+                </button>
+            </div>
+            <div class="card-body" id="analysis-result">
+                <div class="text-muted" id="analysis-placeholder">
+                    点击上方按钮，AI 将自动分析题目涉及的知识点。分析结果将作为建议，你可以自由修改。
+                </div>
+                <div id="analysis-content" style="display:none;">
+                    <div id="matched-section" class="mb-3">
+                        <h6 class="text-success"><i class="bi bi-check-circle"></i> 匹配的知识点</h6>
+                        <div id="matched-list"></div>
+                    </div>
+                    <div id="suggested-section" class="mb-3">
+                        <h6 class="text-warning"><i class="bi bi-lightbulb"></i> 建议新增的知识点</h6>
+                        <div id="suggested-list"></div>
+                    </div>
+                </div>
+                <div id="analysis-loading" style="display:none;" class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">正在分析...</p>
+                </div>
+                <div id="analysis-error" style="display:none;" class="alert alert-danger"></div>
+            </div>
+        </div>
+
+        <!-- Question preview -->
+        <div class="card mb-3">
+            <div class="card-header">题目内容</div>
+            <div class="card-body">
+                <div style="white-space: pre-wrap; max-height: 300px; overflow-y: auto;">{{ question.content }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Knowledge point selection -->
+    <div class="col-md-5">
+        <form method="post">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <i class="bi bi-check2-square"></i> 选择知识点
+                </div>
+                <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                    {% set ns = namespace(current_chapter='') %}
+                    {% for kp in all_kps %}
+                    {% if kp.chapter_name != ns.current_chapter %}
+                    {% if ns.current_chapter != '' %}</div>{% endif %}
+                    <div class="mb-2">
+                        <strong class="text-primary">{{ kp.chapter_name }}</strong>
+                    {% set ns.current_chapter = kp.chapter_name %}
+                    {% endif %}
+                        <div class="form-check ms-2">
+                            <input class="form-check-input kp-checkbox" type="checkbox"
+                                   name="kp_ids" value="{{ kp.id }}" id="kp_{{ kp.id }}"
+                                   {% if kp.id in linked_kp_ids %}checked{% endif %}>
+                            <label class="form-check-label" for="kp_{{ kp.id }}">{{ kp.name }}</label>
+                        </div>
+                    {% endfor %}
+                    {% if all_kps %}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- Add new knowledge points -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <i class="bi bi-plus-circle"></i> 新增知识点
+                </div>
+                <div class="card-body">
+                    <textarea name="new_kps" class="form-control" rows="3"
+                              placeholder="每行一个，格式：章节ID:知识点名称&#10;例如：1:新增知识点A"></textarea>
+                    <div class="form-text">输入章节ID和知识点名称，用冒号分隔</div>
+                </div>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-circle"></i> 确认保存
+                </button>
+                <a href="{{ url_for('question_detail', question_id=question.id) }}" class="btn btn-outline-secondary">
+                    取消
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const QUESTION_ID = {{ question.id }};
+const SUBJECT_NAME = "{{ question.subject_name }}";
+
+async function analyzeQuestion() {
+    const btn = document.getElementById('btn-analyze');
+    const loading = document.getElementById('analysis-loading');
+    const content = document.getElementById('analysis-content');
+    const error = document.getElementById('analysis-error');
+    const placeholder = document.getElementById('analysis-placeholder');
+
+    btn.disabled = true;
+    loading.style.display = 'block';
+    content.style.display = 'none';
+    error.style.display = 'none';
+    placeholder.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                content: {{ question.content|tojson }},
+                subject_name: SUBJECT_NAME,
+            }),
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok) {
+            throw new Error(data.error || '分析失败');
+        }
+
+        // Show matched knowledge points
+        const matchedList = document.getElementById('matched-list');
+        matchedList.innerHTML = '';
+        if (data.matched && data.matched.length > 0) {
+            data.matched.forEach(name => {
+                // Try to find and check the matching checkbox
+                const checkboxes = document.querySelectorAll('.kp-checkbox');
+                checkboxes.forEach(cb => {
+                    const label = cb.nextElementSibling.textContent.trim();
+                    if (label === name || label.includes(name) || name.includes(label)) {
+                        cb.checked = true;
+                        cb.parentElement.classList.add('bg-success', 'bg-opacity-10', 'rounded');
+                    }
+                });
+                matchedList.innerHTML += `<span class="badge bg-success me-1 mb-1">${name}</span>`;
+            });
+        } else {
+            matchedList.innerHTML = '<span class="text-muted">未匹配到已有知识点</span>';
+        }
+
+        // Show suggested new knowledge points
+        const suggestedList = document.getElementById('suggested-list');
+        suggestedList.innerHTML = '';
+        if (data.suggested && data.suggested.length > 0) {
+            data.suggested.forEach(item => {
+                suggestedList.innerHTML += `<span class="badge bg-warning text-dark me-1 mb-1">${item}</span>`;
+            });
+            suggestedList.innerHTML += '<div class="text-muted small mt-2">如需添加这些知识点，请在右侧"新增知识点"区域手动输入</div>';
+        } else {
+            suggestedList.innerHTML = '<span class="text-muted">无新建议</span>';
+        }
+
+        content.style.display = 'block';
+    } catch (e) {
+        error.textContent = e.message;
+        error.style.display = 'block';
+    } finally {
+        loading.style.display = 'none';
+        btn.disabled = false;
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ subject.name }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('subjects_list') }}">学科管理</a></li>
+        <li class="breadcrumb-item active">{{ subject.name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4>{{ subject.name }}</h4>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addChapterModal">
+        <i class="bi bi-plus"></i> 添加章节
+    </button>
+</div>
+
+<div class="row g-3">
+    {% for ch in chapters %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6>
+                    <a href="{{ url_for('chapter_detail', chapter_id=ch.id) }}" class="text-decoration-none">
+                        {{ ch.name }}
+                    </a>
+                </h6>
+                <span class="text-muted small">{{ ch.kp_count }} 个知识点</span>
+            </div>
+            <div class="card-footer bg-transparent">
+                <form action="{{ url_for('chapter_delete', chapter_id=ch.id) }}" method="post"
+                      onsubmit="return confirm('确定删除此章节？')">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% if not chapters %}
+    <div class="text-muted">暂无章节，请点击上方按钮添加</div>
+    {% endif %}
+</div>
+
+<!-- Add Chapter Modal -->
+<div class="modal fade" id="addChapterModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form action="{{ url_for('chapter_add', subject_id=subject.id) }}" method="post">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加章节</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">章节名称</label>
+                    <input type="text" name="name" class="form-control" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">添加</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}题目列表{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4>题目列表</h4>
+    <a href="{{ url_for('question_add') }}" class="btn btn-primary">
+        <i class="bi bi-plus"></i> 录入新题目
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label small mb-0">学科</label>
+                <select name="subject_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">全部</option>
+                    {% for s in subjects %}
+                    <option value="{{ s.id }}" {% if selected_subject == s.id %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if chapters %}
+            <div class="col-auto">
+                <label class="form-label small mb-0">章节</label>
+                <select name="chapter_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">全部</option>
+                    {% for ch in chapters %}
+                    <option value="{{ ch.id }}" {% if selected_chapter == ch.id %}selected{% endif %}>{{ ch.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="col-auto">
+                <label class="form-label small mb-0">掌握度</label>
+                <select name="mastery" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">全部</option>
+                    {% for k, v in MASTERY_LABELS.items() %}
+                    <option value="{{ k }}" {% if selected_mastery == k %}selected{% endif %}>{{ v }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <a href="{{ url_for('questions_list') }}" class="btn btn-sm btn-outline-secondary">重置</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Question list -->
+{% if questions %}
+<div class="list-group">
+    {% for q in questions %}
+    <a href="{{ url_for('question_detail', question_id=q.id) }}" class="list-group-item list-group-item-action">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1">
+                <div class="mb-1">{{ q.content[:150] }}{% if q.content|length > 150 %}...{% endif %}</div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <span class="badge bg-primary">{{ q.subject_name }}</span>
+                    {% for kp in q.get('knowledge_points', []) %}
+                    <span class="badge bg-secondary">{{ kp.name }}</span>
+                    {% endfor %}
+                    {% if q.source %}
+                    <span class="badge bg-light text-dark">{{ q.source }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <span class="badge bg-{{ MASTERY_COLORS[q.mastery_level] }} mastery-badge ms-2 flex-shrink-0">
+                {{ MASTERY_LABELS[q.mastery_level] }}
+            </span>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+    <i class="bi bi-inbox fs-1"></i>
+    <p class="mt-2">暂无题目</p>
+</div>
+{% endif %}
+{% endblock %}

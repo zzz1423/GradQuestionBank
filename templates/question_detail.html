@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}题目详情{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('questions_list') }}">题目列表</a></li>
+        <li class="breadcrumb-item active">第 {{ question.id }} 题</li>
+    </ol>
+</nav>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Question content -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>
+                    <span class="badge bg-primary">{{ question.subject_name }}</span>
+                    {% if question.source %}
+                    <span class="badge bg-light text-dark ms-1">{{ question.source }}</span>
+                    {% endif %}
+                </span>
+                <form action="{{ url_for('question_delete', question_id=question.id) }}" method="post"
+                      onsubmit="return confirm('确定删除此题？')">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash"></i> 删除
+                    </button>
+                </form>
+            </div>
+            <div class="card-body">
+                <div style="white-space: pre-wrap; line-height: 1.8;">{{ question.content }}</div>
+            </div>
+            {% if question.answer %}
+            <div class="card-footer">
+                <strong>答案：</strong> {{ question.answer }}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Knowledge points -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-diagram-3"></i> 关联知识点</span>
+                <a href="{{ url_for('question_review', question_id=question.id) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-pencil"></i> 编辑知识点
+                </a>
+            </div>
+            <div class="card-body">
+                {% if kps %}
+                <div class="d-flex gap-2 flex-wrap">
+                    {% for kp in kps %}
+                    <span class="badge bg-info fs-6">
+                        {{ kp.chapter_name }} > {{ kp.name }}
+                    </span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted">
+                    尚未关联知识点，
+                    <a href="{{ url_for('question_review', question_id=question.id) }}">点击分析</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Mastery sidebar -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-speedometer2"></i> 掌握度标记
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">你对这道题的掌握程度：</p>
+                <div class="d-grid gap-2">
+                    {% for level, label in MASTERY_LABELS.items() %}
+                    {% if level > 0 %}
+                    <form method="post" action="{{ url_for('question_mastery', question_id=question.id) }}">
+                        <input type="hidden" name="level" value="{{ level }}">
+                        <button type="submit"
+                                class="btn btn-{{ MASTERY_COLORS[level] }} w-100 {% if question.mastery_level == level %}active{% endif %}">
+                            {% if level == 1 %}<i class="bi bi-x-circle"></i>{% endif %}
+                            {% if level == 2 %}<i class="bi bi-question-circle"></i>{% endif %}
+                            {% if level == 3 %}<i class="bi bi-check-circle"></i>{% endif %}
+                            {{ label }}
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% if question.mastery_level > 0 %}
+                <form method="post" action="{{ url_for('question_mastery', question_id=question.id) }}" class="mt-2">
+                    <input type="hidden" name="level" value="0">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary w-100">清除标记</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-body text-muted small">
+                <div>录入时间：{{ question.created_at }}</div>
+                <div>更新时间：{{ question.updated_at }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

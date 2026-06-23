@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}学科管理{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4>学科管理</h4>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addSubjectModal">
+        <i class="bi bi-plus"></i> 添加学科
+    </button>
+</div>
+
+<div class="row g-3">
+    {% for s in subjects %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <a href="{{ url_for('subject_detail', subject_id=s.id) }}" class="text-decoration-none">
+                        {{ s.name }}
+                    </a>
+                </h5>
+                <div class="d-flex gap-3 text-muted small mt-2">
+                    <span><i class="bi bi-folder"></i> {{ s.chapter_count }} 章节</span>
+                    <span><i class="bi bi-diagram-3"></i> {{ s.kp_count }} 知识点</span>
+                    <span><i class="bi bi-journal"></i> {{ s.question_count }} 题</span>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <form action="{{ url_for('subject_delete', subject_id=s.id) }}" method="post"
+                      onsubmit="return confirm('确定删除「{{ s.name }}」及其所有章节、知识点和题目？')">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash"></i> 删除
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Add Subject Modal -->
+<div class="modal fade" id="addSubjectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form action="{{ url_for('subject_add') }}" method="post">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加学科</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">学科名称</label>
+                    <input type="text" name="name" class="form-control" placeholder="例如：数学一、英语一" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">添加</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}概览{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h4>题库概览</h4>
+    <p class="text-muted">欢迎使用考研智能题库系统</p>
+</div>
+
+<!-- Stats cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card" style="border-left-color: #0d6efd;">
+            <div class="card-body">
+                <div class="text-muted small">学科</div>
+                <div class="fs-4 fw-bold">{{ stats.subjects }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card" style="border-left-color: #6f42c1;">
+            <div class="card-body">
+                <div class="text-muted small">知识点</div>
+                <div class="fs-4 fw-bold">{{ stats.knowledge_points }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card" style="border-left-color: #0dcaf0;">
+            <div class="card-body">
+                <div class="text-muted small">题目总数</div>
+                <div class="fs-4 fw-bold">{{ stats.questions }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card" style="border-left-color: #198754;">
+            <div class="card-body">
+                <div class="text-muted small">已掌握</div>
+                <div class="fs-4 fw-bold text-success">{{ stats.mastered }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick actions -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <a href="{{ url_for('question_add') }}" class="btn btn-primary w-100 py-3">
+            <i class="bi bi-plus-circle fs-4"></i><br>录入新题目
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="{{ url_for('questions_list') }}" class="btn btn-outline-primary w-100 py-3">
+            <i class="bi bi-journal-text fs-4"></i><br>浏览题目
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="{{ url_for('statistics') }}" class="btn btn-outline-success w-100 py-3">
+            <i class="bi bi-bar-chart fs-4"></i><br>查看统计
+        </a>
+    </div>
+</div>
+
+<!-- Recent questions -->
+{% if recent_questions %}
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-clock-history"></i> 最近录入的题目
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>学科</th>
+                        <th>题干</th>
+                        <th>掌握度</th>
+                        <th>录入时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for q in recent_questions %}
+                    <tr onclick="window.location='{{ url_for('question_detail', question_id=q.id) }}'"
+                        style="cursor:pointer">
+                        <td><span class="badge bg-primary">{{ q.subject_name }}</span></td>
+                        <td>{{ q.content[:80] }}{% if q.content|length > 80 %}...{% endif %}</td>
+                        <td>
+                            <span class="badge bg-{{ MASTERY_COLORS[q.mastery_level] }} mastery-badge">
+                                {{ MASTERY_LABELS[q.mastery_level] }}
+                            </span>
+                        </td>
+                        <td class="text-muted small">{{ q.created_at[:16] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+    <i class="bi bi-inbox fs-1"></i>
+    <p class="mt-2">题库为空，点击上方按钮开始录入题目</p>
+</div>
+{% endif %}
+{% endblock %}

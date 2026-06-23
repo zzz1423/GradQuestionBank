@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ chapter.name }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('subjects_list') }}">学科管理</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('subject_detail', subject_id=chapter.subject_id) }}">{{ chapter.subject_name }}</a></li>
+        <li class="breadcrumb-item active">{{ chapter.name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4>{{ chapter.name }}</h4>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addKpModal">
+        <i class="bi bi-plus"></i> 添加知识点
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>知识点</th>
+                    <th>关联题目数</th>
+                    <th width="80">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for kp in kps %}
+                <tr>
+                    <td>
+                        <strong>{{ kp.name }}</strong>
+                        {% if kp.description %}
+                        <br><small class="text-muted">{{ kp.description }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge bg-info">{{ kp.question_count }}</span>
+                    </td>
+                    <td>
+                        <form action="{{ url_for('kp_delete', kp_id=kp.id) }}" method="post"
+                              onsubmit="return confirm('确定删除此知识点？')">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not kps %}
+                <tr><td colspan="3" class="text-center text-muted">暂无知识点</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add KP Modal -->
+<div class="modal fade" id="addKpModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form action="{{ url_for('kp_add', chapter_id=chapter.id) }}" method="post">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加知识点</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">知识点名称</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述（可选）</label>
+                        <textarea name="description" class="form-control" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">添加</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
