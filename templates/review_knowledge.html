@@ -85,9 +85,29 @@
                     <i class="bi bi-plus-circle"></i> 新增知识点
                 </div>
                 <div class="card-body">
-                    <textarea name="new_kps" class="form-control" rows="3"
-                              placeholder="每行一个，格式：章节ID:知识点名称&#10;例如：1:新增知识点A"></textarea>
-                    <div class="form-text">输入章节ID和知识点名称，用冒号分隔</div>
+                    <div class="row g-2 mb-2" id="newKpRows">
+                        <div class="col-5">
+                            <select class="form-select form-select-sm new-kp-chapter">
+                                <option value="">选择章节</option>
+                                {% set chapters_seen = [] %}
+                                {% for kp in all_kps %}
+                                {% if kp.chapter_name not in chapters_seen %}
+                                <option value="{{ kp.chapter_id }}">{{ kp.chapter_name }}</option>
+                                {% set _ = chapters_seen.append(kp.chapter_name) %}
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-5">
+                            <input type="text" class="form-control form-control-sm new-kp-name" placeholder="知识点名称">
+                        </div>
+                        <div class="col-2">
+                            <button type="button" class="btn btn-sm btn-outline-success w-100" onclick="addKpRow()">+</button>
+                        </div>
+                    </div>
+                    <div id="newKpList"></div>
+                    <input type="hidden" name="new_kps" id="new_kps_hidden">
+                    <div class="form-text">选择章节并输入知识点名称，点击 + 添加</div>
                 </div>
             </div>
 
@@ -106,6 +126,35 @@
 
 {% block extra_js %}
 <script>
+let kpRowCounter = 0;
+function addKpRow() {
+    const chapterSelect = document.querySelector('.new-kp-chapter');
+    const nameInput = document.querySelector('.new-kp-name');
+    const chapterId = chapterSelect.value;
+    const chapterName = chapterSelect.options[chapterSelect.selectedIndex]?.text || '';
+    const kpName = nameInput.value.trim();
+    
+    if (!chapterId || !kpName) { alert('请选择章节并输入知识点名称'); return; }
+    
+    kpRowCounter++;
+    const div = document.createElement('div');
+    div.className = 'd-flex align-items-center gap-2 mb-1';
+    div.id = 'newkp-' + kpRowCounter;
+    div.innerHTML = <span class="badge bg-light text-dark"> > </span>
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove()">x</button>
+        <input type="hidden" data-chapter="" data-name="">;
+    document.getElementById('newKpList').appendChild(div);
+    nameInput.value = '';
+}
+
+// Collect new kps before form submit
+document.querySelector('form').addEventListener('submit', function() {
+    const hidden = document.getElementById('new_kps_hidden');
+    const inputs = document.querySelectorAll('#newKpList input[type=hidden]');
+    const lines = [];
+    inputs.forEach(inp => { lines.push(inp.dataset.chapter + ':' + inp.dataset.name); });
+    hidden.value = lines.join('\n');
+});
 const QUESTION_ID = {{ question.id }};
 const SUBJECT_NAME = "{{ question.subject_name }}";
 

@@ -228,6 +228,7 @@ def questions_list():
     chapter_id = request.args.get("chapter_id", type=int)
     kp_id = request.args.get("kp_id", type=int)
     mastery = request.args.get("mastery", type=int)
+    search = request.args.get("search", "").strip()
 
     query = """
         SELECT DISTINCT q.*, s.name as subject_name
@@ -259,6 +260,9 @@ def questions_list():
     if mastery is not None:
         conditions.append("q.mastery_level = ?")
         params.append(mastery)
+    if search:
+        conditions.append("q.content LIKE ?")
+        params.append(f"%{search}%")
 
     if kp_filter:
         conditions.append(kp_filter)
@@ -295,7 +299,7 @@ def questions_list():
     return render_template("questions.html",
                            questions=questions, subjects=subjects, chapters=chapters,
                            selected_subject=subject_id, selected_chapter=chapter_id,
-                           selected_kp=kp_id, selected_mastery=mastery)
+                           selected_kp=kp_id, selected_mastery=mastery, search=search)
 
 
 @app.route("/questions/add", methods=["GET", "POST"])
@@ -350,6 +354,38 @@ def question_detail(question_id):
 
     return render_template("question_detail.html", question=question, kps=kps)
 
+
+
+@app.route("/questions/<int:question_id>/edit", methods=["GET", "POST"])
+def question_edit(question_id):
+    db = g.db
+    subjects = dicts_from_rows(db.execute("SELECT * FROM subjects ORDER BY id").fetchall())
+    question = dict_from_row(
+        db.execute("SELECT * FROM questions WHERE id = ?", (question_id,)).fetchone()
+    )
+    if not question:
+        flash("题目不存在", "danger")
+        return redirect(url_for("questions_list"))
+
+    if request.method == "POST":
+        subject_id = request.form.get("subject_id", type=int)
+        content = request.form.get("content", "").strip()
+        answer = request.form.get("answer", "").strip()
+        source = request.form.get("source", "").strip()
+
+        if not content:
+            flash("题干不能为空", "danger")
+            return redirect(url_for("question_edit", question_id=question_id))
+
+        db.execute(
+            "UPDATE questions SET subject_id=?, content=?, answer=?, source=?, updated_at=? WHERE id=?",
+            (subject_id, content, answer or None, source or None, datetime.now().isoformat(), question_id),
+        )
+        db.commit()
+        flash("题目已更新", "success")
+        return redirect(url_for("question_detail", question_id=question_id))
+
+    return render_template("edit_question.html", question=question, subjects=subjects)
 
 @app.route("/questions/<int:question_id>/mastery", methods=["POST"])
 def question_mastery(question_id):
