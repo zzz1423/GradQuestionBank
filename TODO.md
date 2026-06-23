@@ -1,4 +1,4 @@
-# Grad Question Bank - 考研智能题库系统
+﻿# Grad Question Bank - 考研智能题库系统
 
 ## 项目定位
 题库管理 + 知识点掌握度分析系统。核心流程：
@@ -36,26 +36,26 @@
 - [ ] 数据库迁移至 Neon Postgres（待 neon-postgres 插件介入）
 
 ## Phase 2 - 学科知识体系管理
-- [ ] 后端 API：学科/章节/知识点 CRUD
-- [ ] **[build-web-apps]** 学科管理页面
-- [ ] **[build-web-apps]** 章节管理页面
-- [ ] **[build-web-apps]** 知识点管理页面
+- [x] 后端 API：学科/章节/知识点 CRUD
+- [x] 学科管理页面
+- [x] 章节管理页面
+- [x] 知识点管理页面
 
 ## Phase 3 - 题目录入与知识点分析
-- [ ] 后端 API：题目 CRUD + DeepSeek 分析接口
-- [ ] **[build-web-apps]** 题目录入页面
-- [ ] **[build-web-apps]** 知识点审核页面
-- [ ] 前后端联调
+- [x] 后端 API：题目 CRUD + DeepSeek 分析接口
+- [x] 题目录入页面
+- [x] 知识点审核页面（下拉选章节 + 动态添加）
+- [ ] DeepSeek API 实际测试（需配置 API Key）
 
 ## Phase 4 - 掌握度标记与统计
-- [ ] 后端 API：掌握度标记 + 统计聚合接口
-- [ ] **[build-web-apps]** 题目列表页（筛选 + 搜索）
-- [ ] **[build-web-apps]** 题目详情页 + 掌握度标记
-- [ ] **[build-web-apps]** 统计仪表盘（图表可视化）
-- [ ] 薄弱知识点排序算法
+- [x] 后端 API：掌握度标记 + 统计聚合接口
+- [x] 题目列表页（筛选 + 搜索）
+- [x] 题目详情页 + 掌握度标记
+- [x] 统计仪表盘（Chart.js 图表）
+- [x] 薄弱知识点排序算法
 
 ## Phase 5 - 数据管理与代码审查
-- [ ] 后端 API：题库导入/导出（JSON 格式）
+- [x] 后端 API：题库导入/导出（JSON 格式）
 - [ ] **[neon-postgres]** 数据库分支备份策略
 - [ ] **[coderabbit]** 全项目代码审查
 - [ ] 根据审查结果修复问题
@@ -74,3 +74,4 @@
 | 2026-06-23 | 项目启动，完成需求讨论与架构设计 |
 | 2026-06-23 | 引入插件体系：build-web-apps、neon-postgres、coderabbit |
 | 2026-06-23 | v1.0.0 发布至 GitHub（Flask + SQLite + Bootstrap） |
+| 2026-06-23 | v1.0.1 发布：搜索、编辑、知识点审核优化 |
