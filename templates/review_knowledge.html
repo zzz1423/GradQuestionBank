@@ -23,18 +23,13 @@
             </div>
             <div class="card-body" id="analysis-result">
                 <div class="text-muted" id="analysis-placeholder">
-                    点击上方按钮，AI 将自动分析题目涉及的知识点和标签。分析结果将作为建议，你可以自由修改。
+                    点击上方按钮，AI 将自动分析题目涉及的知识点。标签会从知识点自动生成。
                 </div>
                 <div id="analysis-content" style="display:none;">
                     <!-- Knowledge points from AI -->
                     <div id="kp-section" class="mb-3">
                         <h6><i class="bi bi-diagram-3"></i> 知识点分析</h6>
                         <div id="kp-list"></div>
-                    </div>
-                    <!-- Tags from AI -->
-                    <div id="tag-section" class="mb-3">
-                        <h6><i class="bi bi-tags"></i> 标签建议</h6>
-                        <div id="tag-list"></div>
                     </div>
                 </div>
                 <div id="analysis-loading" style="display:none;" class="text-center py-3">
@@ -61,24 +56,11 @@
             <div class="card mb-3">
                 <div class="card-header">
                     <i class="bi bi-check2-square"></i> 已选知识点
+                    <small class="text-muted">（标签从知识点自动生成）</small>
                 </div>
-                <div class="card-body" id="selected-kps" style="max-height: 400px; overflow-y: auto;">
+                <div class="card-body" id="selected-kps" style="max-height: 500px; overflow-y: auto;">
                     <div class="text-muted" id="no-kp-hint">尚未选择知识点，请通过 AI 分析或手动添加</div>
                     <!-- Selected KPs will be rendered here by JS -->
-                </div>
-            </div>
-
-            <!-- Tags -->
-            <div class="card mb-3">
-                <div class="card-header">
-                    <i class="bi bi-tags"></i> 标签
-                </div>
-                <div class="card-body">
-                    <div id="selected-tags" class="d-flex flex-wrap gap-1 mb-2"></div>
-                    <div class="input-group input-group-sm">
-                        <input type="text" class="form-control" id="new-tag-input" placeholder="添加标签">
-                        <button type="button" class="btn btn-outline-primary" onclick="addManualTag()">+</button>
-                    </div>
                 </div>
             </div>
 
@@ -136,9 +118,8 @@
 const QUESTION_ID = {{ question.id }};
 const SUBJECT_NAME = "{{ question.subject_name }}";
 
-// Store selected KPs and tags
+// Store selected KPs
 let selectedKPs = [];
-let selectedTags = [];
 
 // Initialize with existing data
 {% for kp in all_kps %}
@@ -176,8 +157,8 @@ function renderSelectedKPs() {
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <div>
                             <span class="badge ${roleBadge} me-1">${roleText}</span>
-                            <strong>${kp.name}</strong>
-                            <small class="text-muted ms-1">${kp.chapter}</small>
+                            <strong>${escapeHtml(kp.name)}</strong>
+                            <small class="text-muted ms-1">${escapeHtml(kp.chapter)}</small>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeKP(${idx})">&times;</button>
                     </div>
@@ -204,15 +185,10 @@ function renderSelectedKPs() {
     container.innerHTML = html;
 }
 
-function renderSelectedTags() {
-    const container = document.getElementById('selected-tags');
-    container.innerHTML = selectedTags.map((tag, idx) => 
-        `<span class="badge bg-info">
-            ${tag}
-            <button type="button" class="btn-close btn-close-white ms-1" 
-                    onclick="removeTag(${idx})" style="font-size: 0.5em;"></button>
-        </span>`
-    ).join('');
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
 }
 
 function addKP(kp) {
@@ -240,21 +216,6 @@ function updateRole(idx, role) {
 function updateWeight(idx, weight) {
     selectedKPs[idx].weight = parseFloat(weight);
     renderSelectedKPs();
-}
-
-function removeTag(idx) {
-    selectedTags.splice(idx, 1);
-    renderSelectedTags();
-}
-
-function addManualTag() {
-    const input = document.getElementById('new-tag-input');
-    const tag = input.value.trim();
-    if (tag && !selectedTags.includes(tag)) {
-        selectedTags.push(tag);
-        renderSelectedTags();
-    }
-    input.value = '';
 }
 
 function addManualKP() {
@@ -325,25 +286,10 @@ async function analyzeQuestion() {
                 
                 const roleBadge = kp.role === 'primary' ? 'bg-primary' : 'bg-secondary';
                 const roleText = kp.role === 'primary' ? '主要' : '次要';
-                kpList.innerHTML += `<span class="badge ${roleBadge} me-1 mb-1">${roleText} ${kp.name} (${kp.weight})</span>`;
+                kpList.innerHTML += `<span class="badge ${roleBadge} me-1 mb-1">${roleText} ${escapeHtml(kp.name)} (${kp.weight})</span>`;
             });
         } else {
             kpList.innerHTML = '<span class="text-muted">未识别到知识点</span>';
-        }
-
-        // Process tags
-        const tagList = document.getElementById('tag-list');
-        tagList.innerHTML = '';
-        if (data.tags && data.tags.length > 0) {
-            data.tags.forEach(tag => {
-                if (!selectedTags.includes(tag)) {
-                    selectedTags.push(tag);
-                }
-                tagList.innerHTML += `<span class="badge bg-info me-1 mb-1">${tag}</span>`;
-            });
-            renderSelectedTags();
-        } else {
-            tagList.innerHTML = '<span class="text-muted">无标签建议</span>';
         }
 
         content.style.display = 'block';
@@ -356,14 +302,15 @@ async function analyzeQuestion() {
     }
 }
 
-// Form submission - collect data into hidden fields
+// Form submission - collect data and auto-generate tags from KPs
 document.getElementById('review-form').addEventListener('submit', function() {
     document.getElementById('kp_data_hidden').value = JSON.stringify(selectedKPs);
-    document.getElementById('tag_data_hidden').value = JSON.stringify(selectedTags);
+    // Auto-generate tags from knowledge point names
+    const tags = [...new Set(selectedKPs.map(kp => kp.name))];
+    document.getElementById('tag_data_hidden').value = JSON.stringify(tags);
 });
 
 // Initial render
 renderSelectedKPs();
-renderSelectedTags();
 </script>
 {% endblock %}
