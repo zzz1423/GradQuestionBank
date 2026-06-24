@@ -308,6 +308,7 @@ wsl -d Ubuntu-24.04 bash -c "cd /mnt/e/Temp/CCC/Codex/GradQuestionBank && /root/
 | v1.0.2 | 2026-06-24 | CodeRabbit 审查修复、批量录入、API 缓存 |
 | v1.1.0 | 2026-06-24 | 知识点分级（primary/secondary）、权重系统、tags |
 | v1.1.1 | 2026-06-24 | 图片上传、AI 题目识别、LaTeX 预览、CodeRabbit 修复 |
+| - | 2026-06-24 | LaTeX 文档清理、Tags 系统简化（从知识点自动生成） |
 
 ---
 
@@ -327,6 +328,12 @@ wsl -d Ubuntu-24.04 bash -c "cd /mnt/e/Temp/CCC/Codex/GradQuestionBank && /root/
 
 ---
 
+## 已知问题
+
+1. **LaTeX 清理** — 用户反馈清理后仍有渲染问题，需要进一步调试
+2. **CodeRabbit** — WSL 网络代理配置问题，暂时无法使用
+3. **Flask secret_key** — 未配置 FLASK_SECRET_KEY 时 session 不持久
+
 ## 注意事项
 
 1. **数据库位置**：`data/grad.db`，备份只需复制此文件
@@ -335,3 +342,5 @@ wsl -d Ubuntu-24.04 bash -c "cd /mnt/e/Temp/CCC/Codex/GradQuestionBank && /root/
 4. **图片上传**：图片转 base64 发送给 DeepSeek，不存储原图
 5. **LaTeX 语法**：行内公式 `$...$`，独立公式 `$$...$$`
 6. **批量录入**：题目间用 `---` 分隔，答案格式 `答案：X`
+7. **Tags** — 从知识点名称自动生成，不需要手动输入
+8. **知识点权重** — 主要知识点通常 0.8-1.0，次要 0.1-0.5
