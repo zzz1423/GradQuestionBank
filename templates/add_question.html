@@ -39,9 +39,6 @@
         font-size: 1.1rem;
         line-height: 1.8;
     }
-    .latex-preview .katex-display {
-        margin: 0.5em 0;
-    }
     .content-textarea {
         min-height: 150px;
         font-family: 'Courier New', monospace;
@@ -91,7 +88,7 @@
     <!-- Image upload and LaTeX preview -->
     <div class="row g-3 mb-3">
         <div class="col-md-6">
-            <label class="form-label">上传题目图片</label>
+            <label class="form-label">上传题目图片（可选）</label>
             <div class="upload-zone" id="upload-zone">
                 <i class="bi bi-cloud-arrow-up fs-1 text-muted"></i>
                 <p class="text-muted mb-0">拖拽图片到此处，或点击上传</p>
@@ -110,22 +107,29 @@
         <div class="col-md-6">
             <label class="form-label">LaTeX 预览</label>
             <div class="latex-preview" id="latex-preview">
-                <span class="text-muted">AI 分析后将在此显示 LaTeX 渲染结果</span>
+                <span class="text-muted">输入内容后自动预览</span>
             </div>
         </div>
     </div>
 
     <!-- Content textarea -->
     <div class="mb-3">
-        <label class="form-label">
-            题目内容 <span class="text-danger">*</span>
-            <small class="text-muted">（支持 LaTeX 格式，如 $x^2$、$\int_0^1 f(x)dx$）</small>
-            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="cleanLatexInput()">
-                <i class="bi bi-magic"></i> 清理 LaTeX 文档
-            </button>
-        </label>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+            <label class="form-label mb-0">
+                题目内容 <span class="text-danger">*</span>
+            </label>
+            <div>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="cleanLatexInput()">
+                    <i class="bi bi-magic"></i> 清理 LaTeX
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-warning ms-1" onclick="resetContent()">
+                    <i class="bi bi-arrow-counterclockwise"></i> 重置
+                </button>
+            </div>
+        </div>
         <textarea name="content" id="content-input" class="form-control content-textarea" 
-                  placeholder="粘贴题目内容，或由 AI 从图片自动提取..." required></textarea>
+                  placeholder="粘贴题目内容（支持 LaTeX，如 $x^2$ 或 $$\\int_0^1 f(x)dx$$）" required></textarea>
+        <div class="form-text">支持 LaTeX 数学公式：行内 $...$ ，独立 $$...$$ ，清理按钮可处理完整 LaTeX 文档</div>
     </div>
 
     <!-- Answer -->
@@ -155,10 +159,6 @@
                 </div>
             </div>
             <div class="mt-2">
-                <label class="form-label small">AI 建议的标签</label>
-                <div id="ai-tags" class="d-flex flex-wrap gap-1"></div>
-            </div>
-            <div class="mt-2">
                 <button type="button" class="btn btn-sm btn-outline-success" onclick="applyAiResult()">
                     <i class="bi bi-check-circle"></i> 应用 AI 结果
                 </button>
@@ -182,57 +182,9 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js">
-// Clean LaTeX document structure
-function cleanLatexInput() {
-    const textarea = document.getElementById('content-input');
-    let text = textarea.value;
-    
-    // Remove document class and packages
-    text = text.replace(/\\documentclass.*?\n/g, '');
-    text = text.replace(/\\usepackage.*?\n/g, '');
-    text = text.replace(/\\geometry.*?\n/g, '');
-    
-    // Remove document environment
-    text = text.replace(/\\begin\{document\}/g, '');
-    text = text.replace(/\\end\{document\}/g, '');
-    
-    // Convert sections to headers
-    text = text.replace(/\\section\*\{(.+?)\}/g, '## $1');
-    text = text.replace(/\\subsection\*\{(.+?)\}/g, '### $1');
-    
-    // Fix typos
-    text = text.replace(/\\$/g, '\\\\[');
-    
-    // Convert \[...\] to $...$
-    text = text.replace(/\\\[(.+?)\\\]/gs, '$$$1$$');
-    
-    // Convert align* to aligned (KaTeX compatible)
-    text = text.replace(/\\begin\{align\*\}(.+?)\\end\{align\*\}/gs, function(match, p1) {
-        return '$\\begin{aligned}' + p1 + '\\end{aligned}$';
-    });
-    
-    // Clean up whitespace
-    text = text.replace(/\n{3,}/g, '\n\n').trim();
-    
-    textarea.value = text;
-    renderLatexPreview();
-    
-    // Show success message
-    const btn = event.target.closest('button');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="bi bi-check"></i> 已清理';
-    btn.classList.remove('btn-outline-secondary');
-    btn.classList.add('btn-outline-success');
-    setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.classList.remove('btn-outline-success');
-        btn.classList.add('btn-outline-secondary');
-    }, 2000);
-}
-</script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script>
-// Image upload handling
+// === Image Upload ===
 const uploadZone = document.getElementById('upload-zone');
 const imageInput = document.getElementById('image-input');
 const previewContainer = document.getElementById('image-preview-container');
@@ -240,29 +192,15 @@ const previewImg = document.getElementById('preview-img');
 let uploadedImageBase64 = null;
 
 uploadZone.addEventListener('click', () => imageInput.click());
-
-uploadZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    uploadZone.classList.add('dragover');
-});
-
-uploadZone.addEventListener('dragleave', () => {
-    uploadZone.classList.remove('dragover');
-});
-
+uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
 uploadZone.addEventListener('drop', (e) => {
     e.preventDefault();
     uploadZone.classList.remove('dragover');
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-        handleImageFile(file);
-    }
+    if (file && file.type.startsWith('image/')) handleImageFile(file);
 });
-
-imageInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) handleImageFile(file);
-});
+imageInput.addEventListener('change', (e) => { if (e.target.files[0]) handleImageFile(e.target.files[0]); });
 
 function handleImageFile(file) {
     const reader = new FileReader();
@@ -282,7 +220,7 @@ function clearImage() {
     previewContainer.style.display = 'none';
 }
 
-// LaTeX preview
+// === LaTeX Preview ===
 const contentInput = document.getElementById('content-input');
 const latexPreview = document.getElementById('latex-preview');
 let previewTimer = null;
@@ -295,19 +233,18 @@ contentInput.addEventListener('input', () => {
 function renderLatexPreview() {
     const text = contentInput.value.trim();
     if (!text) {
-        latexPreview.innerHTML = '<span class="text-muted">AI 分析后将在此显示 LaTeX 渲染结果</span>';
+        latexPreview.innerHTML = '<span class="text-muted">输入内容后自动预览</span>';
         return;
     }
     try {
-        // Replace $$...$$ with display math and $...$ with inline math
         let html = text
             .replace(/\$\$([\s\S]*?)\$\$/g, (match, p1) => {
                 try { return katex.renderToString(p1, { displayMode: true, throwOnError: false }); }
-                catch(e) { return match; }
+                catch(e) { return '<span class="text-danger">' + escapeHtml(match) + '</span>'; }
             })
             .replace(/\$([^$]+?)\$/g, (match, p1) => {
                 try { return katex.renderToString(p1, { displayMode: false, throwOnError: false }); }
-                catch(e) { return match; }
+                catch(e) { return '<span class="text-danger">' + escapeHtml(match) + '</span>'; }
             })
             .replace(/\n/g, '<br>');
         latexPreview.innerHTML = html;
@@ -316,14 +253,84 @@ function renderLatexPreview() {
     }
 }
 
-// AI Analysis
-let aiResultData = null;
-
 function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[c]));
 }
+
+// === Clean LaTeX ===
+let originalContent = null; // Store original for reset
+
+function cleanLatexInput() {
+    const textarea = contentInput;
+    // Save original for reset
+    if (!originalContent) originalContent = textarea.value;
+    
+    let text = textarea.value;
+    
+    // Step 1: Strip ALL HTML tags
+    text = text.replace(/<[^>]+>/g, '');
+    
+    // Step 2: Remove LaTeX document structure
+    text = text.replace(/\\documentclass[^\n]*\n/g, '');
+    text = text.replace(/\\usepackage[^\n]*\n/g, '');
+    text = text.replace(/\\geometry[^\n]*\n/g, '');
+    text = text.replace(/\\begin\{document\}/g, '');
+    text = text.replace(/\\end\{document\}/g, '');
+    
+    // Step 3: Convert sections to headers
+    text = text.replace(/\\section\*\{([^}]+)\}/g, '## $1');
+    text = text.replace(/\\subsection\*\{([^}]+)\}/g, '### $1');
+    
+    // Step 4: Fix common AI typos
+    text = text.replace(/\\\$\$6pt\]/g, '\\\\[6pt]');
+    text = text.replace(/\\\$\$4pt\]/g, '\\\\[4pt]');
+    text = text.replace(/\\\$\$8pt\]/g, '\\\\[8pt]');
+    
+    // Step 5: Convert \[...\] to $$...$$
+    text = text.replace(/\\\[([^\]]+)\\\]/g, '$$$$$1$$$$');
+    
+    // Step 6: Convert align* to aligned (KaTeX compatible)
+    text = text.replace(/\\begin\{align\*\}([\s\S]*?)\\end\{align\*\}/g, (match, p1) => {
+        return '$$\\begin{aligned}' + p1 + '\\end{aligned}$$';
+    });
+    
+    // Step 7: Wrap standalone \begin{aligned} if not already in $$
+    text = text.replace(/(?<!\$)\\begin\{aligned\}([\s\S]*?)\\end\{aligned\}(?!\$)/g, (match, p1) => {
+        return '$$\\begin{aligned}' + p1 + '\\end{aligned}$$';
+    });
+    
+    // Step 8: Clean whitespace
+    text = text.replace(/\\qquad/g, '  ');
+    text = text.replace(/\\quad/g, ' ');
+    text = text.replace(/\n{3,}/g, '\n\n');
+    
+    // Step 9: Trim each line
+    text = text.split('\n').map(l => l.trim()).join('\n').trim();
+    
+    textarea.value = text;
+    renderLatexPreview();
+    
+    // Visual feedback
+    const btn = event.target.closest('button');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check"></i> 已清理';
+    btn.classList.remove('btn-outline-info');
+    btn.classList.add('btn-outline-success');
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('btn-outline-success'); btn.classList.add('btn-outline-info'); }, 2000);
+}
+
+function resetContent() {
+    if (originalContent) {
+        contentInput.value = originalContent;
+        originalContent = null;
+        renderLatexPreview();
+    }
+}
+
+// === AI Analysis ===
+let aiResultData = null;
 
 async function aiAnalyze() {
     const btn = document.getElementById('btn-ai-analyze');
@@ -341,11 +348,7 @@ async function aiAnalyze() {
             content: contentInput.value,
             subject_name: document.querySelector('[name=subject_id]').selectedOptions[0]?.text || ''
         };
-
-        // If image uploaded, include it
-        if (uploadedImageBase64) {
-            body.image = uploadedImageBase64;
-        }
+        if (uploadedImageBase64) body.image = uploadedImageBase64;
 
         const resp = await fetch('/api/analyze-question', {
             method: 'POST',
@@ -361,18 +364,18 @@ async function aiAnalyze() {
         // Show results
         document.getElementById('ai-content').textContent = data.latex_content || data.content || '';
         document.getElementById('ai-kps').innerHTML = (data.knowledge_points || []).map(kp => 
-            `<span class="badge bg-${kp.role === 'primary' ? 'primary' : 'secondary'} me-1">${escapeHtml(kp.name)} (${escapeHtml(kp.weight)})</span>`
-        ).join('');
-        document.getElementById('ai-tags').innerHTML = (data.tags || []).map(tag => 
-            `<span class="badge bg-info me-1">${escapeHtml(tag)}</span>`
+            `<span class="badge bg-${kp.role === 'primary' ? 'primary' : 'secondary'} me-1 mb-1">${escapeHtml(kp.name)} (${kp.weight})</span>`
         ).join('');
 
         result.style.display = 'block';
 
-        // Update LaTeX preview
+        // Auto-apply LaTeX content
         if (data.latex_content) {
             contentInput.value = data.latex_content;
             renderLatexPreview();
+        }
+        if (data.answer) {
+            document.getElementById('answer-input').value = data.answer;
         }
 
     } catch(e) {
@@ -393,54 +396,6 @@ function applyAiResult() {
     if (aiResultData.answer) {
         document.getElementById('answer-input').value = aiResultData.answer;
     }
-}
-
-// Clean LaTeX document structure
-function cleanLatexInput() {
-    const textarea = document.getElementById('content-input');
-    let text = textarea.value;
-    
-    // Remove document class and packages
-    text = text.replace(/\\documentclass.*?\n/g, '');
-    text = text.replace(/\\usepackage.*?\n/g, '');
-    text = text.replace(/\\geometry.*?\n/g, '');
-    
-    // Remove document environment
-    text = text.replace(/\\begin\{document\}/g, '');
-    text = text.replace(/\\end\{document\}/g, '');
-    
-    // Convert sections to headers
-    text = text.replace(/\\section\*\{(.+?)\}/g, '## $1');
-    text = text.replace(/\\subsection\*\{(.+?)\}/g, '### $1');
-    
-    // Fix typos
-    text = text.replace(/\\$/g, '\\\\[');
-    
-    // Convert \[...\] to $...$
-    text = text.replace(/\\\[(.+?)\\\]/gs, '$$$1$$');
-    
-    // Convert align* to aligned (KaTeX compatible)
-    text = text.replace(/\\begin\{align\*\}(.+?)\\end\{align\*\}/gs, function(match, p1) {
-        return '$\\begin{aligned}' + p1 + '\\end{aligned}$';
-    });
-    
-    // Clean up whitespace
-    text = text.replace(/\n{3,}/g, '\n\n').trim();
-    
-    textarea.value = text;
-    renderLatexPreview();
-    
-    // Show success message
-    const btn = event.target.closest('button');
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="bi bi-check"></i> 已清理';
-    btn.classList.remove('btn-outline-secondary');
-    btn.classList.add('btn-outline-success');
-    setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.classList.remove('btn-outline-success');
-        btn.classList.add('btn-outline-secondary');
-    }, 2000);
 }
 </script>
 {% endblock %}
