@@ -10,6 +10,7 @@ from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, jsonify, send_file, g,
 )
+from latex_utils import clean_latex
 from database import get_db, init_db, seed_db, dict_from_row, dicts_from_rows, DB_PATH
 
 app = Flask(__name__)
@@ -545,6 +546,10 @@ def api_analyze_question():
         return jsonify({"error": "请求体必须是 JSON 对象"}), 400
 
     text_content = data.get("content", "").strip()
+
+    # Auto-clean LaTeX document structure
+    if '\\\\documentclass' in text_content or '\\\\begin{document}' in text_content:
+        text_content = clean_latex(text_content)
     image_base64 = data.get("image", "")
     subject_name = data.get("subject_name", "")
 

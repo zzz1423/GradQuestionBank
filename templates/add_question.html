@@ -119,7 +119,10 @@
     <div class="mb-3">
         <label class="form-label">
             题目内容 <span class="text-danger">*</span>
-            <small class="text-muted">（支持 LaTeX 格式，如 $x^2$、$$\int_0^1 f(x)dx$$）</small>
+            <small class="text-muted">（支持 LaTeX 格式，如 $x^2$、$\int_0^1 f(x)dx$）</small>
+            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="cleanLatexInput()">
+                <i class="bi bi-magic"></i> 清理 LaTeX 文档
+            </button>
         </label>
         <textarea name="content" id="content-input" class="form-control content-textarea" 
                   placeholder="粘贴题目内容，或由 AI 从图片自动提取..." required></textarea>
@@ -179,7 +182,55 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js">
+// Clean LaTeX document structure
+function cleanLatexInput() {
+    const textarea = document.getElementById('content-input');
+    let text = textarea.value;
+    
+    // Remove document class and packages
+    text = text.replace(/\\documentclass.*?\n/g, '');
+    text = text.replace(/\\usepackage.*?\n/g, '');
+    text = text.replace(/\\geometry.*?\n/g, '');
+    
+    // Remove document environment
+    text = text.replace(/\\begin\{document\}/g, '');
+    text = text.replace(/\\end\{document\}/g, '');
+    
+    // Convert sections to headers
+    text = text.replace(/\\section\*\{(.+?)\}/g, '## $1');
+    text = text.replace(/\\subsection\*\{(.+?)\}/g, '### $1');
+    
+    // Fix typos
+    text = text.replace(/\\$/g, '\\\\[');
+    
+    // Convert \[...\] to $...$
+    text = text.replace(/\\\[(.+?)\\\]/gs, '$$$1$$');
+    
+    // Convert align* to aligned (KaTeX compatible)
+    text = text.replace(/\\begin\{align\*\}(.+?)\\end\{align\*\}/gs, function(match, p1) {
+        return '$\\begin{aligned}' + p1 + '\\end{aligned}$';
+    });
+    
+    // Clean up whitespace
+    text = text.replace(/\n{3,}/g, '\n\n').trim();
+    
+    textarea.value = text;
+    renderLatexPreview();
+    
+    // Show success message
+    const btn = event.target.closest('button');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check"></i> 已清理';
+    btn.classList.remove('btn-outline-secondary');
+    btn.classList.add('btn-outline-success');
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.classList.remove('btn-outline-success');
+        btn.classList.add('btn-outline-secondary');
+    }, 2000);
+}
+</script>
 <script>
 // Image upload handling
 const uploadZone = document.getElementById('upload-zone');
@@ -342,6 +393,54 @@ function applyAiResult() {
     if (aiResultData.answer) {
         document.getElementById('answer-input').value = aiResultData.answer;
     }
+}
+
+// Clean LaTeX document structure
+function cleanLatexInput() {
+    const textarea = document.getElementById('content-input');
+    let text = textarea.value;
+    
+    // Remove document class and packages
+    text = text.replace(/\\documentclass.*?\n/g, '');
+    text = text.replace(/\\usepackage.*?\n/g, '');
+    text = text.replace(/\\geometry.*?\n/g, '');
+    
+    // Remove document environment
+    text = text.replace(/\\begin\{document\}/g, '');
+    text = text.replace(/\\end\{document\}/g, '');
+    
+    // Convert sections to headers
+    text = text.replace(/\\section\*\{(.+?)\}/g, '## $1');
+    text = text.replace(/\\subsection\*\{(.+?)\}/g, '### $1');
+    
+    // Fix typos
+    text = text.replace(/\\$/g, '\\\\[');
+    
+    // Convert \[...\] to $...$
+    text = text.replace(/\\\[(.+?)\\\]/gs, '$$$1$$');
+    
+    // Convert align* to aligned (KaTeX compatible)
+    text = text.replace(/\\begin\{align\*\}(.+?)\\end\{align\*\}/gs, function(match, p1) {
+        return '$\\begin{aligned}' + p1 + '\\end{aligned}$';
+    });
+    
+    // Clean up whitespace
+    text = text.replace(/\n{3,}/g, '\n\n').trim();
+    
+    textarea.value = text;
+    renderLatexPreview();
+    
+    // Show success message
+    const btn = event.target.closest('button');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check"></i> 已清理';
+    btn.classList.remove('btn-outline-secondary');
+    btn.classList.add('btn-outline-success');
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.classList.remove('btn-outline-success');
+        btn.classList.add('btn-outline-secondary');
+    }, 2000);
 }
 </script>
 {% endblock %}
