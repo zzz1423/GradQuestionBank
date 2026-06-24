@@ -1,4 +1,4 @@
-﻿"""Grad Question Bank - Main Flask Application."""
+"""Grad Question Bank - Main Flask Application."""
 
 import json
 import os
@@ -354,7 +354,7 @@ def question_detail(question_id):
         WHERE qkp.question_id = ?
     """, (question_id,)).fetchall())
 
-    return render_template("question_detail.html", question=question, kps=kps)
+    return render_template("question_detail.html", question=question, kps=kps, tags=tags)
 
 
 
@@ -444,40 +444,82 @@ def question_review(question_id):
         linked_kp_ids = {r["knowledge_point_id"] for r in existing}
 
     if request.method == "POST":
-        selected_ids = request.form.getlist("kp_ids")
-        selected_ids = [int(x) for x in selected_ids]
+        import json as json_module
 
-        # Also handle custom new knowledge points
-        new_kps_raw = request.form.get("new_kps", "").strip()
-        if new_kps_raw:
-            # Format: "chapter_id:kp_name" per line
-            for line in new_kps_raw.split("\n"):
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split(":", 1)
-                if len(parts) == 2:
-                    ch_id_str, kp_name = parts[0].strip(), parts[1].strip()
-                    try:
-                        ch_id = int(ch_id_str)
-                        cursor = db.execute(
-                            "INSERT INTO knowledge_points (chapter_id, name) VALUES (?, ?)",
-                            (ch_id, kp_name),
-                        )
-                        db.commit()
-                        selected_ids.append(cursor.lastrowid)
-                    except (ValueError, Exception):
-                        pass
+        # Parse knowledge points data (with role and weight)
+        kp_data_raw = request.form.get("kp_data", "[]")
+        try:
+            kp_list = json_module.loads(kp_data_raw)
+        except Exception:
+            kp_list = []
 
-        # Update associations
+        # Parse tags data
+        tag_data_raw = request.form.get("tag_data", "[]")
+        try:
+            tag_list = json_module.loads(tag_data_raw)
+        except Exception:
+            tag_list = []
+
+        # Update knowledge point associations
         db.execute("DELETE FROM question_knowledge_points WHERE question_id = ?", (question_id,))
-        for kp_id in selected_ids:
+        for kp in kp_list:
+            kp_id = kp.get("id")
+            role = kp.get("role", "primary")
+            weight = kp.get("weight", 1.0)
+            weight = max(0.1, min(1.0, float(weight)))  # Clamp to 0.1-1.0
+
+            # If it's a new knowledge point, create it first
+            if kp.get("isNew"):
+                chapter_name = kp.get("chapter", "")
+                chapter = db.execute(
+                    "SELECT id FROM chapters WHERE name = ? AND subject_id = ?",
+                    (chapter_name, question["subject_id"])
+                ).fetchone()
+                if chapter:
+                    chapter_id = chapter["id"]
+                else:
+                    # Create new chapter if needed
+                    cursor = db.execute(
+                        "INSERT INTO chapters (subject_id, name) VALUES (?, ?)",
+                        (question["subject_id"], chapter_name or "未分类"),
+                    )
+                    chapter_id = cursor.lastrowid
+
+                cursor = db.execute(
+                    "INSERT INTO knowledge_points (chapter_id, name) VALUES (?, ?)",
+                    (chapter_id, kp.get("name", "未命名")),
+                )
+                db.commit()
+                kp_id = cursor.lastrowid
+
+            if kp_id:
+                db.execute(
+                    "INSERT OR IGNORE INTO question_knowledge_points (question_id, knowledge_point_id, role, weight) VALUES (?, ?, ?, ?)",
+                    (question_id, kp_id, role, weight),
+                )
+
+        # Update tags
+        db.execute("DELETE FROM question_tags WHERE question_id = ?", (question_id,))
+        for tag_name in tag_list:
+            tag_name = tag_name.strip()
+            if not tag_name:
+                continue
+            # Find or create tag
+            tag = db.execute("SELECT id FROM tags WHERE name = ?", (tag_name,)).fetchone()
+            if not tag:
+                cursor = db.execute("INSERT INTO tags (name) VALUES (?)", (tag_name,))
+                db.commit()
+                tag_id = cursor.lastrowid
+            else:
+                tag_id = tag["id"]
+
             db.execute(
-                "INSERT OR IGNORE INTO question_knowledge_points (question_id, knowledge_point_id) VALUES (?, ?)",
-                (question_id, kp_id),
+                "INSERT OR IGNORE INTO question_tags (question_id, tag_id) VALUES (?, ?)",
+                (question_id, tag_id),
             )
+
         db.commit()
-        flash("知识点关联已保存", "success")
+        flash("知识点和标签已保存", "success")
         return redirect(url_for("question_detail", question_id=question_id))
 
     return render_template("review_knowledge.html",
@@ -652,20 +694,20 @@ def statistics():
         GROUP BY mastery_level
     """).fetchall())
 
-    # Per-knowledge-point mastery
+    # Per-knowledge-point mastery (weighted)
     kp_stats = dicts_from_rows(db.execute("""
         SELECT kp.id, kp.name, c.name as chapter_name, s.name as subject_name,
-               q.mastery_level, COUNT(*) as count
+               q.mastery_level, qkp.weight, COUNT(*) as count
         FROM questions q
         JOIN question_knowledge_points qkp ON qkp.question_id = q.id
         JOIN knowledge_points kp ON qkp.knowledge_point_id = kp.id
         JOIN chapters c ON kp.chapter_id = c.id
         JOIN subjects s ON c.subject_id = s.id
-        GROUP BY kp.id, q.mastery_level
+        GROUP BY kp.id, q.mastery_level, qkp.weight
         ORDER BY s.id, c.sort_order, kp.sort_order
     """).fetchall())
 
-    # Aggregate per knowledge point
+    # Aggregate per knowledge point (weighted calculation)
     kp_aggregated = {}
     for row in kp_stats:
         kp_id = row["id"]
@@ -674,24 +716,36 @@ def statistics():
                 "name": row["name"],
                 "chapter_name": row["chapter_name"],
                 "subject_name": row["subject_name"],
-                "total": 0, "mastered": 0, "fuzzy": 0, "weak": 0,
+                "total_weight": 0,
+                "weighted_mastered": 0,
+                "weighted_fuzzy": 0,
+                "weighted_weak": 0,
+                "question_count": 0,
             }
-        kp_aggregated[kp_id]["total"] += row["count"]
+        weight = row["weight"]
+        count = row["count"]
+        kp_aggregated[kp_id]["total_weight"] += weight * count
+        kp_aggregated[kp_id]["question_count"] += count
         if row["mastery_level"] == 3:
-            kp_aggregated[kp_id]["mastered"] += row["count"]
+            kp_aggregated[kp_id]["weighted_mastered"] += weight * count
         elif row["mastery_level"] == 2:
-            kp_aggregated[kp_id]["fuzzy"] += row["count"]
+            kp_aggregated[kp_id]["weighted_fuzzy"] += weight * count
         elif row["mastery_level"] == 1:
-            kp_aggregated[kp_id]["weak"] += row["count"]
+            kp_aggregated[kp_id]["weighted_weak"] += weight * count
 
-    # Calculate weakness score (higher = weaker)
+    # Calculate weakness score and mastery rate (weighted)
     for kp in kp_aggregated.values():
-        if kp["total"] > 0:
-            kp["weakness_score"] = (kp["weak"] * 2 + kp["fuzzy"]) / (kp["total"] * 2)
-            kp["mastery_rate"] = kp["mastered"] / kp["total"] * 100
+        if kp["total_weight"] > 0:
+            kp["weakness_score"] = (kp["weighted_weak"] * 2 + kp["weighted_fuzzy"]) / (kp["total_weight"] * 2)
+            kp["mastery_rate"] = kp["weighted_mastered"] / kp["total_weight"] * 100
         else:
             kp["weakness_score"] = 0
             kp["mastery_rate"] = 0
+        # Convert for template compatibility
+        kp["total"] = kp["question_count"]
+        kp["mastered"] = round(kp["weighted_mastered"])
+        kp["fuzzy"] = round(kp["weighted_fuzzy"])
+        kp["weak"] = round(kp["weighted_weak"])
 
     # Sort by weakness (most weak first)
     weak_points = sorted(kp_aggregated.values(), key=lambda x: -x["weakness_score"])

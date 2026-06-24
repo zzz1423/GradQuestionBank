@@ -38,20 +38,40 @@
         </div>
 
         <!-- Knowledge points -->
+        <!-- Tags -->
+        {% if tags %}
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex gap-2 flex-wrap">
+                    {% for tag in tags %}
+                    <span class="badge bg-info">{{ tag.name }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-diagram-3"></i> 关联知识点</span>
                 <a href="{{ url_for('question_review', question_id=question.id) }}" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-pencil"></i> 编辑知识点
+                    <i class="bi bi-pencil"></i> AI分析 / 编辑
                 </a>
             </div>
             <div class="card-body">
                 {% if kps %}
-                <div class="d-flex gap-2 flex-wrap">
+                <div class="d-flex flex-column gap-2">
                     {% for kp in kps %}
-                    <span class="badge bg-info fs-6">
-                        {{ kp.chapter_name }} > {{ kp.name }}
-                    </span>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if kp.role == "primary" %}
+                        <span class="badge bg-primary">主要</span>
+                        {% else %}
+                        <span class="badge bg-secondary">次要</span>
+                        {% endif %}
+                        <span class="fw-bold">{{ kp.name }}</span>
+                        <small class="text-muted">{{ kp.chapter_name }}</small>
+                        <span class="badge bg-light text-dark">权重 {{ kp.weight }}</span>
+                    </div>
                     {% endfor %}
                 </div>
                 {% else %}

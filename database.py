@@ -60,6 +60,20 @@ def init_db():
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         );
 
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS question_tags (
+            question_id INTEGER NOT NULL,
+            tag_id INTEGER NOT NULL,
+            PRIMARY KEY (question_id, tag_id),
+            FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS api_cache (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             content_hash TEXT NOT NULL UNIQUE,
@@ -71,6 +85,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS question_knowledge_points (
             question_id INTEGER NOT NULL,
             knowledge_point_id INTEGER NOT NULL,
+            role TEXT DEFAULT 'primary',
+            weight REAL DEFAULT 1.0,
             PRIMARY KEY (question_id, knowledge_point_id),
             FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
             FOREIGN KEY (knowledge_point_id) REFERENCES knowledge_points(id) ON DELETE CASCADE

@@ -23,16 +23,18 @@
             </div>
             <div class="card-body" id="analysis-result">
                 <div class="text-muted" id="analysis-placeholder">
-                    点击上方按钮，AI 将自动分析题目涉及的知识点。分析结果将作为建议，你可以自由修改。
+                    点击上方按钮，AI 将自动分析题目涉及的知识点和标签。分析结果将作为建议，你可以自由修改。
                 </div>
                 <div id="analysis-content" style="display:none;">
-                    <div id="matched-section" class="mb-3">
-                        <h6 class="text-success"><i class="bi bi-check-circle"></i> 匹配的知识点</h6>
-                        <div id="matched-list"></div>
+                    <!-- Knowledge points from AI -->
+                    <div id="kp-section" class="mb-3">
+                        <h6><i class="bi bi-diagram-3"></i> 知识点分析</h6>
+                        <div id="kp-list"></div>
                     </div>
-                    <div id="suggested-section" class="mb-3">
-                        <h6 class="text-warning"><i class="bi bi-lightbulb"></i> 建议新增的知识点</h6>
-                        <div id="suggested-list"></div>
+                    <!-- Tags from AI -->
+                    <div id="tag-section" class="mb-3">
+                        <h6><i class="bi bi-tags"></i> 标签建议</h6>
+                        <div id="tag-list"></div>
                     </div>
                 </div>
                 <div id="analysis-loading" style="display:none;" class="text-center py-3">
@@ -44,7 +46,7 @@
         </div>
 
         <!-- Question preview -->
-        <div class="card mb-3">
+        <div class="card">
             <div class="card-header">题目内容</div>
             <div class="card-body">
                 <div style="white-space: pre-wrap; max-height: 300px; overflow-y: auto;">{{ question.content }}</div>
@@ -52,64 +54,69 @@
         </div>
     </div>
 
-    <!-- Knowledge point selection -->
+    <!-- Right panel: Manual selection -->
     <div class="col-md-5">
-        <form method="post">
+        <form method="post" id="review-form">
+            <!-- Selected knowledge points -->
             <div class="card mb-3">
                 <div class="card-header">
-                    <i class="bi bi-check2-square"></i> 选择知识点
+                    <i class="bi bi-check2-square"></i> 已选知识点
                 </div>
-                <div class="card-body" style="max-height: 500px; overflow-y: auto;">
-                    {% set ns = namespace(current_chapter='') %}
-                    {% for kp in all_kps %}
-                    {% if kp.chapter_name != ns.current_chapter %}
-                    {% if ns.current_chapter != '' %}</div>{% endif %}
-                    <div class="mb-2">
-                        <strong class="text-primary">{{ kp.chapter_name }}</strong>
-                    {% set ns.current_chapter = kp.chapter_name %}
-                    {% endif %}
-                        <div class="form-check ms-2">
-                            <input class="form-check-input kp-checkbox" type="checkbox"
-                                   name="kp_ids" value="{{ kp.id }}" id="kp_{{ kp.id }}"
-                                   {% if kp.id in linked_kp_ids %}checked{% endif %}>
-                            <label class="form-check-label" for="kp_{{ kp.id }}">{{ kp.name }}</label>
-                        </div>
-                    {% endfor %}
-                    {% if all_kps %}</div>{% endif %}
+                <div class="card-body" id="selected-kps" style="max-height: 400px; overflow-y: auto;">
+                    <div class="text-muted" id="no-kp-hint">尚未选择知识点，请通过 AI 分析或手动添加</div>
+                    <!-- Selected KPs will be rendered here by JS -->
                 </div>
             </div>
 
-            <!-- Add new knowledge points -->
+            <!-- Tags -->
             <div class="card mb-3">
                 <div class="card-header">
-                    <i class="bi bi-plus-circle"></i> 新增知识点
+                    <i class="bi bi-tags"></i> 标签
                 </div>
                 <div class="card-body">
-                    <div class="row g-2 mb-2" id="newKpRows">
-                        <div class="col-5">
-                            <select class="form-select form-select-sm new-kp-chapter">
-                                <option value="">选择章节</option>
-                                {% set chapters_seen = [] %}
-                                {% for kp in all_kps %}
-                                {% if kp.chapter_name not in chapters_seen %}
-                                <option value="{{ kp.chapter_id }}">{{ kp.chapter_name }}</option>
-                                {% set _ = chapters_seen.append(kp.chapter_name) %}
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-5">
-                            <input type="text" class="form-control form-control-sm new-kp-name" placeholder="知识点名称">
-                        </div>
-                        <div class="col-2">
-                            <button type="button" class="btn btn-sm btn-outline-success w-100" onclick="addKpRow()">+</button>
-                        </div>
+                    <div id="selected-tags" class="d-flex flex-wrap gap-1 mb-2"></div>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" id="new-tag-input" placeholder="添加标签">
+                        <button type="button" class="btn btn-outline-primary" onclick="addManualTag()">+</button>
                     </div>
-                    <div id="newKpList"></div>
-                    <input type="hidden" name="new_kps" id="new_kps_hidden">
-                    <div class="form-text">选择章节并输入知识点名称，点击 + 添加</div>
                 </div>
             </div>
+
+            <!-- Manual add -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <i class="bi bi-plus-circle"></i> 手动添加知识点
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <select class="form-select form-select-sm" id="manual-kp-select">
+                            <option value="">选择已有知识点</option>
+                            {% for kp in all_kps %}
+                            <option value="{{ kp.id }}" data-chapter="{{ kp.chapter_name }}">{{ kp.chapter_name }} > {{ kp.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" id="manual-role">
+                                <option value="primary">主要知识点</option>
+                                <option value="secondary">次要知识点</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <input type="number" class="form-control form-control-sm" id="manual-weight" 
+                                   placeholder="权重" min="0.1" max="1" step="0.1" value="1.0">
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary w-100" onclick="addManualKP()">
+                        添加知识点
+                    </button>
+                </div>
+            </div>
+
+            <!-- Hidden fields for form submission -->
+            <input type="hidden" name="kp_data" id="kp_data_hidden">
+            <input type="hidden" name="tag_data" id="tag_data_hidden">
 
             <div class="d-grid gap-2">
                 <button type="submit" class="btn btn-primary">
@@ -126,37 +133,148 @@
 
 {% block extra_js %}
 <script>
-let kpRowCounter = 0;
-function addKpRow() {
-    const chapterSelect = document.querySelector('.new-kp-chapter');
-    const nameInput = document.querySelector('.new-kp-name');
-    const chapterId = chapterSelect.value;
-    const chapterName = chapterSelect.options[chapterSelect.selectedIndex]?.text || '';
-    const kpName = nameInput.value.trim();
-    
-    if (!chapterId || !kpName) { alert('请选择章节并输入知识点名称'); return; }
-    
-    kpRowCounter++;
-    const div = document.createElement('div');
-    div.className = 'd-flex align-items-center gap-2 mb-1';
-    div.id = 'newkp-' + kpRowCounter;
-    div.innerHTML = <span class="badge bg-light text-dark"> > </span>
-        <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.parentElement.remove()">x</button>
-        <input type="hidden" data-chapter="" data-name="">;
-    document.getElementById('newKpList').appendChild(div);
-    nameInput.value = '';
-}
-
-// Collect new kps before form submit
-document.querySelector('form').addEventListener('submit', function() {
-    const hidden = document.getElementById('new_kps_hidden');
-    const inputs = document.querySelectorAll('#newKpList input[type=hidden]');
-    const lines = [];
-    inputs.forEach(inp => { lines.push(inp.dataset.chapter + ':' + inp.dataset.name); });
-    hidden.value = lines.join('\n');
-});
 const QUESTION_ID = {{ question.id }};
 const SUBJECT_NAME = "{{ question.subject_name }}";
+
+// Store selected KPs and tags
+let selectedKPs = [];
+let selectedTags = [];
+
+// Initialize with existing data
+{% for kp in all_kps %}
+{% if kp.id in linked_kp_ids %}
+selectedKPs.push({
+    id: {{ kp.id }},
+    name: "{{ kp.name }}",
+    chapter: "{{ kp.chapter_name }}",
+    role: "primary",
+    weight: 1.0,
+    isNew: false
+});
+{% endif %}
+{% endfor %}
+
+function renderSelectedKPs() {
+    const container = document.getElementById('selected-kps');
+    const hint = document.getElementById('no-kp-hint');
+    
+    if (selectedKPs.length === 0) {
+        hint.style.display = 'block';
+        container.innerHTML = '';
+        container.appendChild(hint);
+        return;
+    }
+    
+    hint.style.display = 'none';
+    let html = '';
+    selectedKPs.forEach((kp, idx) => {
+        const roleBadge = kp.role === 'primary' ? 'bg-primary' : 'bg-secondary';
+        const roleText = kp.role === 'primary' ? '主要' : '次要';
+        html += `
+            <div class="card mb-2" data-idx="${idx}">
+                <div class="card-body p-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <div>
+                            <span class="badge ${roleBadge} me-1">${roleText}</span>
+                            <strong>${kp.name}</strong>
+                            <small class="text-muted ms-1">${kp.chapter}</small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeKP(${idx})">&times;</button>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <select class="form-select form-select-sm" onchange="updateRole(${idx}, this.value)">
+                                <option value="primary" ${kp.role === 'primary' ? 'selected' : ''}>主要</option>
+                                <option value="secondary" ${kp.role === 'secondary' ? 'selected' : ''}>次要</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <div class="input-group input-group-sm">
+                                <input type="range" class="form-range" min="0.1" max="1" step="0.1" 
+                                       value="${kp.weight}" onchange="updateWeight(${idx}, this.value)"
+                                       style="width: 60%;">
+                                <span class="input-group-text">${kp.weight}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function renderSelectedTags() {
+    const container = document.getElementById('selected-tags');
+    container.innerHTML = selectedTags.map((tag, idx) => 
+        `<span class="badge bg-info">
+            ${tag}
+            <button type="button" class="btn-close btn-close-white ms-1" 
+                    onclick="removeTag(${idx})" style="font-size: 0.5em;"></button>
+        </span>`
+    ).join('');
+}
+
+function addKP(kp) {
+    // Check if already added
+    if (selectedKPs.some(k => k.id === kp.id && !kp.isNew)) return;
+    selectedKPs.push(kp);
+    renderSelectedKPs();
+}
+
+function removeKP(idx) {
+    selectedKPs.splice(idx, 1);
+    renderSelectedKPs();
+}
+
+function updateRole(idx, role) {
+    selectedKPs[idx].role = role;
+    if (role === 'primary' && selectedKPs[idx].weight < 0.5) {
+        selectedKPs[idx].weight = 0.8;
+    } else if (role === 'secondary' && selectedKPs[idx].weight > 0.5) {
+        selectedKPs[idx].weight = 0.3;
+    }
+    renderSelectedKPs();
+}
+
+function updateWeight(idx, weight) {
+    selectedKPs[idx].weight = parseFloat(weight);
+    renderSelectedKPs();
+}
+
+function removeTag(idx) {
+    selectedTags.splice(idx, 1);
+    renderSelectedTags();
+}
+
+function addManualTag() {
+    const input = document.getElementById('new-tag-input');
+    const tag = input.value.trim();
+    if (tag && !selectedTags.includes(tag)) {
+        selectedTags.push(tag);
+        renderSelectedTags();
+    }
+    input.value = '';
+}
+
+function addManualKP() {
+    const select = document.getElementById('manual-kp-select');
+    const role = document.getElementById('manual-role').value;
+    const weight = parseFloat(document.getElementById('manual-weight').value);
+    
+    if (!select.value) return;
+    
+    const opt = select.options[select.selectedIndex];
+    addKP({
+        id: parseInt(select.value),
+        name: opt.text.split(' > ').pop(),
+        chapter: opt.dataset.chapter,
+        role: role,
+        weight: weight,
+        isNew: false
+    });
+    select.value = '';
+}
 
 async function analyzeQuestion() {
     const btn = document.getElementById('btn-analyze');
@@ -182,41 +300,50 @@ async function analyzeQuestion() {
         });
 
         const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || '分析失败');
 
-        if (!resp.ok) {
-            throw new Error(data.error || '分析失败');
-        }
-
-        // Show matched knowledge points
-        const matchedList = document.getElementById('matched-list');
-        matchedList.innerHTML = '';
-        if (data.matched && data.matched.length > 0) {
-            data.matched.forEach(name => {
-                // Try to find and check the matching checkbox
-                const checkboxes = document.querySelectorAll('.kp-checkbox');
-                checkboxes.forEach(cb => {
-                    const label = cb.nextElementSibling.textContent.trim();
-                    if (label === name || label.includes(name) || name.includes(label)) {
-                        cb.checked = true;
-                        cb.parentElement.classList.add('bg-success', 'bg-opacity-10', 'rounded');
-                    }
-                });
-                matchedList.innerHTML += `<span class="badge bg-success me-1 mb-1">${name}</span>`;
+        // Process knowledge points
+        const kpList = document.getElementById('kp-list');
+        kpList.innerHTML = '';
+        if (data.knowledge_points && data.knowledge_points.length > 0) {
+            data.knowledge_points.forEach(kp => {
+                // Find matching existing KP
+                const existing = Array.from(document.querySelectorAll('#manual-kp-select option')).find(opt => 
+                    opt.text.includes(kp.name) || kp.name.includes(opt.text.split(' > ').pop())
+                );
+                
+                const kpData = {
+                    id: existing ? parseInt(existing.value) : Date.now(),
+                    name: kp.name,
+                    chapter: existing ? existing.dataset.chapter : (kp.chapter || '新增'),
+                    role: kp.role || 'primary',
+                    weight: kp.weight || 1.0,
+                    isNew: kp.is_new || false
+                };
+                
+                addKP(kpData);
+                
+                const roleBadge = kp.role === 'primary' ? 'bg-primary' : 'bg-secondary';
+                const roleText = kp.role === 'primary' ? '主要' : '次要';
+                kpList.innerHTML += `<span class="badge ${roleBadge} me-1 mb-1">${roleText} ${kp.name} (${kp.weight})</span>`;
             });
         } else {
-            matchedList.innerHTML = '<span class="text-muted">未匹配到已有知识点</span>';
+            kpList.innerHTML = '<span class="text-muted">未识别到知识点</span>';
         }
 
-        // Show suggested new knowledge points
-        const suggestedList = document.getElementById('suggested-list');
-        suggestedList.innerHTML = '';
-        if (data.suggested && data.suggested.length > 0) {
-            data.suggested.forEach(item => {
-                suggestedList.innerHTML += `<span class="badge bg-warning text-dark me-1 mb-1">${item}</span>`;
+        // Process tags
+        const tagList = document.getElementById('tag-list');
+        tagList.innerHTML = '';
+        if (data.tags && data.tags.length > 0) {
+            data.tags.forEach(tag => {
+                if (!selectedTags.includes(tag)) {
+                    selectedTags.push(tag);
+                }
+                tagList.innerHTML += `<span class="badge bg-info me-1 mb-1">${tag}</span>`;
             });
-            suggestedList.innerHTML += '<div class="text-muted small mt-2">如需添加这些知识点，请在右侧"新增知识点"区域手动输入</div>';
+            renderSelectedTags();
         } else {
-            suggestedList.innerHTML = '<span class="text-muted">无新建议</span>';
+            tagList.innerHTML = '<span class="text-muted">无标签建议</span>';
         }
 
         content.style.display = 'block';
@@ -228,5 +355,15 @@ async function analyzeQuestion() {
         btn.disabled = false;
     }
 }
+
+// Form submission - collect data into hidden fields
+document.getElementById('review-form').addEventListener('submit', function() {
+    document.getElementById('kp_data_hidden').value = JSON.stringify(selectedKPs);
+    document.getElementById('tag_data_hidden').value = JSON.stringify(selectedTags);
+});
+
+// Initial render
+renderSelectedKPs();
+renderSelectedTags();
 </script>
 {% endblock %}
