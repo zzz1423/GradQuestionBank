@@ -1,6 +1,60 @@
 {% extends "base.html" %}
 {% block title %}录入题目{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<style>
+    .upload-zone {
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        min-height: 200px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+        border-color: #0d6efd;
+        background: #f8f9ff;
+    }
+    .upload-zone.has-image {
+        padding: 0.5rem;
+    }
+    .upload-zone img {
+        max-width: 100%;
+        max-height: 300px;
+        border-radius: 4px;
+    }
+    .latex-preview {
+        min-height: 200px;
+        padding: 1rem;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow-y: auto;
+        font-size: 1.1rem;
+        line-height: 1.8;
+    }
+    .latex-preview .katex-display {
+        margin: 0.5em 0;
+    }
+    .content-textarea {
+        min-height: 150px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.95rem;
+    }
+    .ai-panel {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
@@ -9,47 +63,285 @@
     </ol>
 </nav>
 
-<h4 class="mb-4">录入新题目</h4>
-
-<div class="card">
-    <div class="card-body">
-        <form method="post">
-            <div class="mb-3">
-                <label class="form-label">学科 <span class="text-danger">*</span></label>
-                <select name="subject_id" class="form-select" required>
-                    <option value="">请选择学科</option>
-                    {% for s in subjects %}
-                    <option value="{{ s.id }}">{{ s.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">题干 <span class="text-danger">*</span></label>
-                <textarea name="content" class="form-control" rows="8" required
-                          placeholder="粘贴完整题目，选择题请包含选项&#10;&#10;示例：&#10;下列关于唯物辩证法的说法，正确的是（）&#10;A. 矛盾的斗争性是绝对的、有条件的&#10;B. 矛盾的同一性是相对的、无条件的&#10;C. 矛盾的同一性是相对的、有条件的&#10;D. 矛盾的斗争性是相对的、有条件的"></textarea>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">答案</label>
-                <input type="text" name="answer" class="form-control"
-                       placeholder="填写结果即可，如：C 或 42 或简要文字答案">
-                <div class="form-text">选择题填选项字母，填空/简答填关键结果</div>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">来源</label>
-                <input type="text" name="source" class="form-control"
-                       placeholder="如：2024年真题、张宇1000题">
-            </div>
-
-            <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-check-circle"></i> 提交并分析知识点
-                </button>
-                <a href="{{ url_for('questions_list') }}" class="btn btn-outline-secondary">取消</a>
-            </div>
-        </form>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4>录入新题目</h4>
+    <a href="{{ url_for('question_batch') }}" class="btn btn-outline-primary">
+        <i class="bi bi-upload"></i> 批量录入
+    </a>
 </div>
+
+<form method="post" id="question-form" enctype="multipart/form-data">
+    <!-- Top row: subject and source -->
+    <div class="row g-3 mb-3">
+        <div class="col-md-6">
+            <label class="form-label">学科 <span class="text-danger">*</span></label>
+            <select name="subject_id" class="form-select" required>
+                <option value="">请选择学科</option>
+                {% for s in subjects %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">来源</label>
+            <input type="text" name="source" class="form-control" placeholder="如：2024年真题、张宇1000题">
+        </div>
+    </div>
+
+    <!-- Image upload and LaTeX preview -->
+    <div class="row g-3 mb-3">
+        <div class="col-md-6">
+            <label class="form-label">上传题目图片</label>
+            <div class="upload-zone" id="upload-zone">
+                <i class="bi bi-cloud-arrow-up fs-1 text-muted"></i>
+                <p class="text-muted mb-0">拖拽图片到此处，或点击上传</p>
+                <small class="text-muted">支持 JPG、PNG、GIF</small>
+            </div>
+            <input type="file" id="image-input" name="image" accept="image/*" style="display:none;">
+            <div id="image-preview-container" style="display:none;">
+                <div class="upload-zone has-image" id="image-preview-zone">
+                    <img id="preview-img" src="" alt="预览">
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger mt-1" onclick="clearImage()">
+                    <i class="bi bi-trash"></i> 移除图片
+                </button>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">LaTeX 预览</label>
+            <div class="latex-preview" id="latex-preview">
+                <span class="text-muted">AI 分析后将在此显示 LaTeX 渲染结果</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content textarea -->
+    <div class="mb-3">
+        <label class="form-label">
+            题目内容 <span class="text-danger">*</span>
+            <small class="text-muted">（支持 LaTeX 格式，如 $x^2$、$$\int_0^1 f(x)dx$$）</small>
+        </label>
+        <textarea name="content" id="content-input" class="form-control content-textarea" 
+                  placeholder="粘贴题目内容，或由 AI 从图片自动提取..." required></textarea>
+    </div>
+
+    <!-- Answer -->
+    <div class="mb-3">
+        <label class="form-label">答案</label>
+        <input type="text" name="answer" id="answer-input" class="form-control"
+               placeholder="填写结果即可，如：C 或 42 或简要文字答案">
+    </div>
+
+    <!-- AI Analysis panel -->
+    <div class="ai-panel mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0"><i class="bi bi-robot"></i> AI 辅助分析</h6>
+            <button type="button" class="btn btn-primary" id="btn-ai-analyze" onclick="aiAnalyze()">
+                <i class="bi bi-stars"></i> AI 分析题目
+            </button>
+        </div>
+        <div id="ai-result" style="display:none;">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label small">AI 识别的题目内容</label>
+                    <div id="ai-content" class="bg-white p-2 rounded border" style="max-height: 150px; overflow-y: auto;"></div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small">AI 建议的知识点</label>
+                    <div id="ai-kps" class="bg-white p-2 rounded border" style="max-height: 150px; overflow-y: auto;"></div>
+                </div>
+            </div>
+            <div class="mt-2">
+                <label class="form-label small">AI 建议的标签</label>
+                <div id="ai-tags" class="d-flex flex-wrap gap-1"></div>
+            </div>
+            <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="applyAiResult()">
+                    <i class="bi bi-check-circle"></i> 应用 AI 结果
+                </button>
+            </div>
+        </div>
+        <div id="ai-loading" style="display:none;" class="text-center py-2">
+            <div class="spinner-border spinner-border-sm text-primary"></div>
+            <span class="text-muted ms-2">正在分析...</span>
+        </div>
+        <div id="ai-error" style="display:none;" class="alert alert-danger py-1 mt-2"></div>
+    </div>
+
+    <!-- Submit buttons -->
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-circle"></i> 保存题目
+        </button>
+        <a href="{{ url_for('questions_list') }}" class="btn btn-outline-secondary">取消</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script>
+// Image upload handling
+const uploadZone = document.getElementById('upload-zone');
+const imageInput = document.getElementById('image-input');
+const previewContainer = document.getElementById('image-preview-container');
+const previewImg = document.getElementById('preview-img');
+let uploadedImageBase64 = null;
+
+uploadZone.addEventListener('click', () => imageInput.click());
+
+uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.classList.add('dragover');
+});
+
+uploadZone.addEventListener('dragleave', () => {
+    uploadZone.classList.remove('dragover');
+});
+
+uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+        handleImageFile(file);
+    }
+});
+
+imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) handleImageFile(file);
+});
+
+function handleImageFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        uploadedImageBase64 = e.target.result;
+        previewImg.src = uploadedImageBase64;
+        uploadZone.style.display = 'none';
+        previewContainer.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearImage() {
+    uploadedImageBase64 = null;
+    imageInput.value = '';
+    uploadZone.style.display = 'flex';
+    previewContainer.style.display = 'none';
+}
+
+// LaTeX preview
+const contentInput = document.getElementById('content-input');
+const latexPreview = document.getElementById('latex-preview');
+let previewTimer = null;
+
+contentInput.addEventListener('input', () => {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(renderLatexPreview, 500);
+});
+
+function renderLatexPreview() {
+    const text = contentInput.value.trim();
+    if (!text) {
+        latexPreview.innerHTML = '<span class="text-muted">AI 分析后将在此显示 LaTeX 渲染结果</span>';
+        return;
+    }
+    try {
+        // Replace $$...$$ with display math and $...$ with inline math
+        let html = text
+            .replace(/\$\$([\s\S]*?)\$\$/g, (match, p1) => {
+                try { return katex.renderToString(p1, { displayMode: true, throwOnError: false }); }
+                catch(e) { return match; }
+            })
+            .replace(/\$([^$]+?)\$/g, (match, p1) => {
+                try { return katex.renderToString(p1, { displayMode: false, throwOnError: false }); }
+                catch(e) { return match; }
+            })
+            .replace(/\n/g, '<br>');
+        latexPreview.innerHTML = html;
+    } catch(e) {
+        latexPreview.textContent = text;
+    }
+}
+
+// AI Analysis
+let aiResultData = null;
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+async function aiAnalyze() {
+    const btn = document.getElementById('btn-ai-analyze');
+    const loading = document.getElementById('ai-loading');
+    const result = document.getElementById('ai-result');
+    const error = document.getElementById('ai-error');
+
+    btn.disabled = true;
+    loading.style.display = 'block';
+    result.style.display = 'none';
+    error.style.display = 'none';
+
+    try {
+        const body = {
+            content: contentInput.value,
+            subject_name: document.querySelector('[name=subject_id]').selectedOptions[0]?.text || ''
+        };
+
+        // If image uploaded, include it
+        if (uploadedImageBase64) {
+            body.image = uploadedImageBase64;
+        }
+
+        const resp = await fetch('/api/analyze-question', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || '分析失败');
+
+        aiResultData = data;
+
+        // Show results
+        document.getElementById('ai-content').textContent = data.latex_content || data.content || '';
+        document.getElementById('ai-kps').innerHTML = (data.knowledge_points || []).map(kp => 
+            `<span class="badge bg-${kp.role === 'primary' ? 'primary' : 'secondary'} me-1">${escapeHtml(kp.name)} (${escapeHtml(kp.weight)})</span>`
+        ).join('');
+        document.getElementById('ai-tags').innerHTML = (data.tags || []).map(tag => 
+            `<span class="badge bg-info me-1">${escapeHtml(tag)}</span>`
+        ).join('');
+
+        result.style.display = 'block';
+
+        // Update LaTeX preview
+        if (data.latex_content) {
+            contentInput.value = data.latex_content;
+            renderLatexPreview();
+        }
+
+    } catch(e) {
+        error.textContent = e.message;
+        error.style.display = 'block';
+    } finally {
+        loading.style.display = 'none';
+        btn.disabled = false;
+    }
+}
+
+function applyAiResult() {
+    if (!aiResultData) return;
+    if (aiResultData.latex_content) {
+        contentInput.value = aiResultData.latex_content;
+        renderLatexPreview();
+    }
+    if (aiResultData.answer) {
+        document.getElementById('answer-input').value = aiResultData.answer;
+    }
+}
+</script>
 {% endblock %}

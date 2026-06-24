@@ -13,7 +13,12 @@ from flask import (
 from database import get_db, init_db, seed_db, dict_from_row, dicts_from_rows, DB_PATH
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY")
+if not app.secret_key:
+    # Fallback for development - generates a warning
+    import warnings
+    warnings.warn("FLASK_SECRET_KEY not set, using random key (sessions won't persist)")
+    app.secret_key = os.urandom(24)
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -242,7 +247,6 @@ def questions_list():
 
     if kp_id:
         joins.append("JOIN question_knowledge_points qkp ON qkp.question_id = q.id")
-        params.append(kp_id)
         kp_filter = "qkp.knowledge_point_id = ?"
     else:
         kp_filter = None
@@ -250,7 +254,6 @@ def questions_list():
     if chapter_id:
         joins.append("JOIN question_knowledge_points qkp2 ON qkp2.question_id = q.id")
         joins.append("JOIN knowledge_points kp2 ON kp2.id = qkp2.knowledge_point_id")
-        params.append(chapter_id)
         chapter_filter = "kp2.chapter_id = ?"
     else:
         chapter_filter = None
@@ -268,8 +271,10 @@ def questions_list():
 
     if kp_filter:
         conditions.append(kp_filter)
+        params.append(kp_id)
     if chapter_filter:
         conditions.append(chapter_filter)
+        params.append(chapter_id)
 
     full_query = query
     for j in joins:
@@ -352,6 +357,13 @@ def question_detail(question_id):
         JOIN knowledge_points kp ON qkp.knowledge_point_id = kp.id
         JOIN chapters c ON kp.chapter_id = c.id
         WHERE qkp.question_id = ?
+    """, (question_id,)).fetchall())
+
+    tags = dicts_from_rows(db.execute("""
+        SELECT t.name
+        FROM question_tags qt
+        JOIN tags t ON qt.tag_id = t.id
+        WHERE qt.question_id = ?
     """, (question_id,)).fetchall())
 
     return render_template("question_detail.html", question=question, kps=kps, tags=tags)
@@ -489,7 +501,6 @@ def question_review(question_id):
                     "INSERT INTO knowledge_points (chapter_id, name) VALUES (?, ?)",
                     (chapter_id, kp.get("name", "未命名")),
                 )
-                db.commit()
                 kp_id = cursor.lastrowid
 
             if kp_id:
@@ -508,7 +519,6 @@ def question_review(question_id):
             tag = db.execute("SELECT id FROM tags WHERE name = ?", (tag_name,)).fetchone()
             if not tag:
                 cursor = db.execute("INSERT INTO tags (name) VALUES (?)", (tag_name,))
-                db.commit()
                 tag_id = cursor.lastrowid
             else:
                 tag_id = tag["id"]
@@ -524,6 +534,129 @@ def question_review(question_id):
 
     return render_template("review_knowledge.html",
                            question=question, all_kps=all_kps, linked_kp_ids=linked_kp_ids)
+
+
+
+@app.route("/api/analyze-question", methods=["POST"])
+def api_analyze_question():
+    """Analyze question from image and/or text, return LaTeX + KP + tags."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "请求体必须是 JSON 对象"}), 400
+
+    text_content = data.get("content", "").strip()
+    image_base64 = data.get("image", "")
+    subject_name = data.get("subject_name", "")
+
+    if not text_content and not image_base64:
+        return jsonify({"error": "请提供题目图片或文字内容"}), 400
+
+    if not DEEPSEEK_API_KEY:
+        return jsonify({"error": "未配置 DEEPSEEK_API_KEY 环境变量"}), 400
+
+    # Build messages for DeepSeek
+    messages = []
+
+    # System prompt
+    system_prompt = """你是一个考研题目分析助手。你的任务是：
+1. 如果提供了图片，识别图片中的题目内容
+2. 将题目内容转换为规范的 LaTeX 格式（数学公式用 $...$ 或 $$...$$）
+3. 分析题目涉及的知识点，区分主要和次要，并给出权重建议 (0.1-1.0)
+4. 建议合适的标签
+5. 如果能确定答案，也一并给出
+
+请用JSON格式返回：
+{
+  "content": "题目原始文字内容",
+  "latex_content": "LaTeX格式的题目内容",
+  "answer": "答案（如果能确定）",
+  "knowledge_points": [
+    {"name": "知识点名", "role": "primary/secondary", "weight": 0.8}
+  ],
+  "tags": ["标签1", "标签2"]
+}"""
+
+    user_message = []
+    user_message.append({"type": "text", "text": f"学科：{subject_name}\n\n"})
+
+    if image_base64:
+        # Vision API format
+        user_message.append({
+            "type": "image_url",
+            "image_url": {"url": image_base64}
+        })
+        if text_content:
+            user_message.append({"type": "text", "text": f"用户补充说明：{text_content}"})
+        else:
+            user_message.append({"type": "text", "text": "请识别图片中的题目内容并分析。"})
+    else:
+        user_message.append({"type": "text", "text": f"题目内容：{text_content}"})
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message}
+    ]
+
+    # Check cache (for text-only queries)
+    if text_content and not image_base64:
+        cache_key = hashlib.md5(f"{subject_name}:{text_content}".encode()).hexdigest()
+        cached = g.db.execute(
+            "SELECT response_json FROM api_cache WHERE content_hash = ?", (cache_key,)
+        ).fetchone()
+        if cached:
+            return jsonify(json.loads(cached["response_json"]))
+
+    try:
+        resp = requests.post(
+            DEEPSEEK_API_URL,
+            headers={
+                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "deepseek-chat",  # Use "deepseek-vision" if available
+                "messages": messages,
+                "temperature": 0.3,
+                "max_tokens": 4096,
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        ai_text = result["choices"][0]["message"]["content"]
+
+        # Try to extract JSON from response
+        json_match = re.search(r'\{[\s\S]*\}', ai_text)
+        if json_match:
+            parsed = json.loads(json_match.group())
+        else:
+            parsed = {
+                "content": text_content,
+                "latex_content": text_content,
+                "knowledge_points": [],
+                "tags": [],
+                "raw": ai_text
+            }
+
+        # Ensure latex_content exists
+        if "latex_content" not in parsed:
+            parsed["latex_content"] = parsed.get("content", text_content)
+
+        # Cache the result (text-only)
+        if text_content and not image_base64:
+            g.db.execute(
+                "INSERT OR IGNORE INTO api_cache (content_hash, subject_name, response_json) VALUES (?, ?, ?)",
+                (cache_key, subject_name, json.dumps(parsed, ensure_ascii=False)),
+            )
+            g.db.commit()
+
+        return jsonify(parsed)
+
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"API 调用失败：{str(e)}"}), 500
+    except (json.JSONDecodeError, KeyError) as e:
+        return jsonify({"error": f"解析返回结果失败：{str(e)}", "raw": ai_text if 'ai_text' in dir() else ""}), 500
+
 
 
 @app.route("/api/analyze", methods=["POST"])
@@ -817,12 +950,15 @@ def api_export():
         q_data["knowledge_points"] = [{"name": k["name"], "chapter": k["chapter_name"]} for k in kps]
         data["questions"].append(q_data)
 
-    # Write to temp file and send
-    export_path = os.path.join(os.path.dirname(DB_PATH), "export.json")
-    with open(export_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-    return send_file(export_path, as_attachment=True, download_name="题库导出.json")
+    # Build response in memory
+    from io import BytesIO
+    payload = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    return send_file(
+        BytesIO(payload),
+        as_attachment=True,
+        download_name="题库导出.json",
+        mimetype="application/json",
+    )
 
 
 @app.route("/api/import", methods=["POST"])
