@@ -57,8 +57,8 @@
 ## Phase 5 - 数据管理与代码审查
 - [x] 后端 API：题库导入/导出（JSON 格式）
 - [ ] **[neon-postgres]** 数据库分支备份策略
-- [ ] **[coderabbit]** 全项目代码审查（需先安装 CLI：`winget install CodeRabbit.CLI`）
-- [ ] 根据审查结果修复问题
+- [x] **[coderabbit]** 全项目代码审查（v1.0.2，发现2个IDE配置问题）
+- [x] 根据审查结果修复问题（.idea/ 加入 .gitignore）
 
 ## Phase 6 - 优化与扩展（后期）
 - [ ] OCR 图片识别提取题目
@@ -75,3 +75,4 @@
 | 2026-06-23 | 引入插件体系：build-web-apps、neon-postgres、coderabbit |
 | 2026-06-23 | v1.0.0 发布至 GitHub（Flask + SQLite + Bootstrap） |
 | 2026-06-23 | v1.0.1 发布：搜索、编辑、知识点审核优化 |
+| 2026-06-24 | CodeRabbit 审查完成，修复 IDE 配置泄露 |

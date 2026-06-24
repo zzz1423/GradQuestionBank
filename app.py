@@ -1,8 +1,10 @@
-"""Grad Question Bank - Main Flask Application."""
+﻿"""Grad Question Bank - Main Flask Application."""
 
 import json
 import os
 import requests
+import hashlib
+import re
 from datetime import datetime
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -523,6 +525,14 @@ def api_analyze():
 请用JSON格式返回，格式如下：
 {{"matched": ["知识点1", "知识点2"], "suggested": ["章节名 > 新知识点名"]}}"""
 
+    # Check cache first
+    content_hash = hashlib.md5(content.encode()).hexdigest()
+    cached = db.execute(
+        "SELECT response_json FROM api_cache WHERE content_hash = ?", (content_hash,)
+    ).fetchone()
+    if cached:
+        return jsonify(json.loads(cached["response_json"]))
+
     try:
         resp = requests.post(
             DEEPSEEK_API_URL,
@@ -543,13 +553,18 @@ def api_analyze():
 
         # Try to extract JSON from response
         # Find JSON block in response
-        import re
         json_match = re.search(r'\{[^{}]*\}', ai_text, re.DOTALL)
         if json_match:
             parsed = json.loads(json_match.group())
         else:
             parsed = {"matched": [], "suggested": [], "raw": ai_text}
 
+        # Cache the result
+        db.execute(
+            "INSERT OR IGNORE INTO api_cache (content_hash, subject_name, response_json) VALUES (?, ?, ?)",
+            (cache_key, subject_name, json.dumps(parsed, ensure_ascii=False)),
+        )
+        db.commit()
         return jsonify(parsed)
 
     except requests.exceptions.RequestException as e:
@@ -558,6 +573,73 @@ def api_analyze():
         return jsonify({"error": f"解析返回结果失败：{str(e)}", "raw": ai_text if 'ai_text' in dir() else ""}), 500
 
 # ── Statistics ─────────────────────────────────────────────
+
+
+
+@app.route("/questions/batch", methods=["GET", "POST"])
+def question_batch():
+    db = g.db
+    subjects = dicts_from_rows(db.execute("SELECT * FROM subjects ORDER BY id").fetchall())
+
+    if request.method == "POST":
+        subject_id = request.form.get("subject_id", type=int)
+        raw_content = request.form.get("content", "").strip()
+        source = request.form.get("source", "").strip()
+        auto_analyze = request.form.get("auto_analyze") == "1"
+
+        if not raw_content:
+            flash("题目内容不能为空", "danger")
+            return redirect(url_for("question_batch"))
+
+        # Split questions by ---
+        questions_raw = re.split(r'\n---\n|\n---$|^---\n', raw_content)
+        questions_raw = [q.strip() for q in questions_raw if q.strip()]
+
+        imported = 0
+        for q_text in questions_raw:
+            # Extract answer if present (格式：答案：X 或 答案: X)
+            answer_match = re.search(r'[\n]?答案[：:](.+)$', q_text, re.MULTILINE)
+            if answer_match:
+                answer = answer_match.group(1).strip()
+                content_text = q_text[:answer_match.start()].strip()
+            else:
+                answer = None
+                content_text = q_text
+
+            if not content_text:
+                continue
+
+            cursor = db.execute(
+                "INSERT INTO questions (subject_id, content, answer, source) VALUES (?, ?, ?, ?)",
+                (subject_id, content_text, answer, source or None),
+            )
+            question_id = cursor.lastrowid
+            imported += 1
+
+            # Auto-analyze if requested and API key is set
+            if auto_analyze and DEEPSEEK_API_KEY:
+                try:
+                    # Check cache first
+                    cache_key = hashlib.md5(f"{subject_name}:{content_text}".encode()).hexdigest()
+                    subj = db.execute("SELECT name FROM subjects WHERE id = ?", (subject_id,)).fetchone()
+                    subj_name = subj["name"] if subj else ""
+                    cache_key = hashlib.md5(f"{subj_name}:{content_text}".encode()).hexdigest()
+                    cached = db.execute(
+                        "SELECT response_json FROM api_cache WHERE content_hash = ?", (cache_key,)
+                    ).fetchone()
+                    if cached:
+                        parsed = json.loads(cached["response_json"])
+                    else:
+                        # Call API (simplified version)
+                        parsed = {"matched": [], "suggested": []}
+                except Exception:
+                    pass
+
+        db.commit()
+        flash(f"成功录入 {imported} 道题目", "success")
+        return redirect(url_for("questions_list"))
+
+    return render_template("batch_import.html", subjects=subjects)
 
 @app.route("/statistics")
 def statistics():

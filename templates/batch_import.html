@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}批量录入{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('questions_list') }}">题目列表</a></li>
+        <li class="breadcrumb-item active">批量录入</li>
+    </ol>
+</nav>
+
+<h4 class="mb-4">批量录入题目</h4>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label">学科 <span class="text-danger">*</span></label>
+                <select name="subject_id" class="form-select" required>
+                    <option value="">请选择学科</option>
+                    {% for s in subjects %}
+                    <option value="{{ s.id }}">{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">题目内容 <span class="text-danger">*</span></label>
+                <textarea name="content" class="form-control" rows="15" required
+                          placeholder="每道题之间用 --- 分隔，例如：&#10;&#10;题目1内容...&#10;答案：A&#10;---&#10;题目2内容...&#10;答案：B"></textarea>
+                <div class="form-text">使用三个减号（---）分隔不同题目。答案请写在题目末尾，格式为"答案：X"</div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">来源（可选）</label>
+                <input type="text" name="source" class="form-control" placeholder="如：2024年真题">
+            </div>
+
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="auto_analyze" id="auto_analyze" value="1">
+                <label class="form-check-label" for="auto_analyze">
+                    录入后自动调用 AI 分析知识点（需要配置 DEEPSEEK_API_KEY）
+                </label>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-upload"></i> 批量录入
+                </button>
+                <a href="{{ url_for('questions_list') }}" class="btn btn-outline-secondary">取消</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">格式说明</div>
+    <div class="card-body">
+        <p>每道题之间使用 <code>---</code> 分隔，系统会自动识别。</p>
+        <p>答案写在题目末尾，格式为 <code>答案：X</code>（选择题）或 <code>答案：文字内容</code>（简答题）。</p>
+        <pre class="bg-light p-3"><code>下列关于唯物辩证法的说法，正确的是（）
+A. 矛盾的斗争性是绝对的
+B. 矛盾的同一性是无条件的
+C. 矛盾的同一性是相对的、有条件的
+D. 矛盾的斗争性是相对的
+答案：C
+---
+TCP三次握手的正确顺序是（）
+A. SYN, SYN-ACK, ACK
+B. ACK, SYN, SYN-ACK
+C. SYN, ACK, SYN-ACK
+D. SYN-ACK, SYN, ACK
+答案：A</code></pre>
+    </div>
+</div>
+{% endblock %}

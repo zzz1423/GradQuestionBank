@@ -60,6 +60,14 @@ def init_db():
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         );
 
+        CREATE TABLE IF NOT EXISTS api_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content_hash TEXT NOT NULL UNIQUE,
+            subject_name TEXT,
+            response_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS question_knowledge_points (
             question_id INTEGER NOT NULL,
             knowledge_point_id INTEGER NOT NULL,
