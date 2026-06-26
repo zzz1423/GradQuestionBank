@@ -121,19 +121,11 @@ const SUBJECT_NAME = "{{ question.subject_name }}";
 // Store selected KPs
 let selectedKPs = [];
 
-// Initialize with existing data
-{% for kp in all_kps %}
-{% if kp.id in linked_kp_ids %}
-selectedKPs.push({
-    id: {{ kp.id }},
-    name: "{{ kp.name }}",
-    chapter: "{{ kp.chapter_name }}",
-    role: "primary",
-    weight: 1.0,
-    isNew: false
+// Initialize with existing data (preserving role and weight)
+const linkedKPsData = {{ linked_kps_data|tojson }};
+linkedKPsData.forEach(function(kp) {
+    selectedKPs.push({ id: kp.id, name: kp.name, chapter: kp.chapter, role: kp.role, weight: kp.weight, isNew: false });
 });
-{% endif %}
-{% endfor %}
 
 function renderSelectedKPs() {
     const container = document.getElementById('selected-kps');

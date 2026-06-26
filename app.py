@@ -26,6 +26,75 @@ DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
 # ── Database lifecycle ─────────────────────────────────────
 
+
+
+def _safe_weight(val, default=1.0):
+    """Parse a weight value safely, clamping to 0.1-1.0."""
+    try:
+        return max(0.1, min(1.0, float(val)))
+    except (ValueError, TypeError):
+        return default
+
+
+def _save_analysis(db, question_id, subject_id, parsed):
+    """Persist AI analysis results: link knowledge points and tags to a question."""
+    for kp in parsed.get("knowledge_points", []):
+        kp_name = kp.get("name", "").strip()
+        if not kp_name:
+            continue
+        chapter_name = str(kp.get("chapter") or "").strip() or "未分类"
+        role = kp.get("role", "primary")
+        weight = _safe_weight(kp.get("weight", 1.0))
+
+        chapter = db.execute(
+            "SELECT id FROM chapters WHERE name = ? AND subject_id = ?",
+            (chapter_name, subject_id)
+        ).fetchone()
+        if not chapter:
+            cursor = db.execute(
+                "INSERT INTO chapters (subject_id, name) VALUES (?, ?)",
+                (subject_id, chapter_name),
+            )
+            chapter_id = cursor.lastrowid
+        else:
+            chapter_id = chapter["id"]
+
+        kp_row = db.execute(
+            "SELECT id FROM knowledge_points WHERE name = ? AND chapter_id = ?",
+            (kp_name, chapter_id)
+        ).fetchone()
+        if not kp_row:
+            cursor = db.execute(
+                "INSERT INTO knowledge_points (chapter_id, name) VALUES (?, ?)",
+                (chapter_id, kp_name),
+            )
+            kp_id = cursor.lastrowid
+        else:
+            kp_id = kp_row["id"]
+
+        db.execute(
+            "INSERT OR IGNORE INTO question_knowledge_points "
+            "(question_id, knowledge_point_id, role, weight) VALUES (?, ?, ?, ?)",
+            (question_id, kp_id, role, weight),
+        )
+
+    # Tags
+    for tag_name in parsed.get("tags", []):
+        tag_name = tag_name.strip()
+        if not tag_name:
+            continue
+        tag = db.execute("SELECT id FROM tags WHERE name = ?", (tag_name,)).fetchone()
+        if not tag:
+            cursor = db.execute("INSERT INTO tags (name) VALUES (?)", (tag_name,))
+            tag_id = cursor.lastrowid
+        else:
+            tag_id = tag["id"]
+        db.execute(
+            "INSERT OR IGNORE INTO question_tags (question_id, tag_id) VALUES (?, ?)",
+            (question_id, tag_id),
+        )
+
+
 @app.before_request
 def before_request():
     g.db = get_db()
@@ -447,14 +516,22 @@ def question_review(question_id):
         ORDER BY c.sort_order, kp.sort_order
     """, (question["subject_id"],)).fetchall())
 
-    # Get currently linked knowledge points
+    # Get currently linked knowledge points (with role and weight for GET)
     linked_kp_ids = set()
+    linked_kps_data = []
     if request.method == "GET":
-        existing = db.execute(
-            "SELECT knowledge_point_id FROM question_knowledge_points WHERE question_id = ?",
-            (question_id,)
-        ).fetchall()
-        linked_kp_ids = {r["knowledge_point_id"] for r in existing}
+        existing = db.execute("""
+            SELECT qkp.knowledge_point_id, qkp.role, qkp.weight
+            FROM question_knowledge_points qkp
+            WHERE qkp.question_id = ?
+        """, (question_id,)).fetchall()
+        for r in existing:
+            linked_kp_ids.add(r["knowledge_point_id"])
+            kp_info = next((k for k in all_kps if k["id"] == r["knowledge_point_id"]), None)
+            if kp_info:
+                linked_kps_data.append({"id": r["knowledge_point_id"], "name": kp_info["name"],
+                                        "chapter": kp_info["chapter_name"], "role": r["role"],
+                                        "weight": r["weight"]})
 
     if request.method == "POST":
         import json as json_module
@@ -478,12 +555,14 @@ def question_review(question_id):
         for kp in kp_list:
             kp_id = kp.get("id")
             role = kp.get("role", "primary")
-            weight = kp.get("weight", 1.0)
-            weight = max(0.1, min(1.0, float(weight)))  # Clamp to 0.1-1.0
+            try:
+                weight = max(0.1, min(1.0, float(kp.get("weight", 1.0))))
+            except (ValueError, TypeError):
+                weight = 1.0
 
             # If it's a new knowledge point, create it first
             if kp.get("isNew"):
-                chapter_name = kp.get("chapter", "")
+                chapter_name = str(kp.get("chapter") or "").strip() or "未分类"
                 chapter = db.execute(
                     "SELECT id FROM chapters WHERE name = ? AND subject_id = ?",
                     (chapter_name, question["subject_id"])
@@ -494,7 +573,7 @@ def question_review(question_id):
                     # Create new chapter if needed
                     cursor = db.execute(
                         "INSERT INTO chapters (subject_id, name) VALUES (?, ?)",
-                        (question["subject_id"], chapter_name or "未分类"),
+                        (question["subject_id"], chapter_name),
                     )
                     chapter_id = cursor.lastrowid
 
@@ -534,7 +613,8 @@ def question_review(question_id):
         return redirect(url_for("question_detail", question_id=question_id))
 
     return render_template("review_knowledge.html",
-                           question=question, all_kps=all_kps, linked_kp_ids=linked_kp_ids)
+                           question=question, all_kps=all_kps, linked_kp_ids=linked_kp_ids,
+                           linked_kps_data=linked_kps_data)
 
 
 
@@ -548,7 +628,7 @@ def api_analyze_question():
     text_content = data.get("content", "").strip()
 
     # Auto-clean LaTeX document structure
-    if '\\\\documentclass' in text_content or '\\\\begin{document}' in text_content:
+    if '\\documentclass' in text_content or '\\begin{document}' in text_content:
         text_content = clean_latex(text_content)
     image_base64 = data.get("image", "")
     subject_name = data.get("subject_name", "")
@@ -619,7 +699,7 @@ def api_analyze_question():
                 "Content-Type": "application/json",
             },
             json={
-                "model": "deepseek-chat",  # Use "deepseek-vision" if available
+                "model": "deepseek-chat",
                 "messages": messages,
                 "temperature": 0.3,
                 "max_tokens": 4096,
@@ -667,9 +747,11 @@ def api_analyze_question():
 @app.route("/api/analyze", methods=["POST"])
 def api_analyze():
     """Call DeepSeek API to analyze question knowledge points."""
-    data = request.get_json()
-    content = data.get("content", "")
-    subject_name = data.get("subject_name", "")
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "请求体必须是 JSON 对象"}), 400
+    content = str(data.get("content") or "").strip()
+    subject_name = str(data.get("subject_name") or "").strip()
 
     if not DEEPSEEK_API_KEY:
         return jsonify({"error": "未配置 DEEPSEEK_API_KEY 环境变量"}), 400
@@ -742,7 +824,7 @@ def api_analyze():
         # Cache the result
         db.execute(
             "INSERT OR IGNORE INTO api_cache (content_hash, subject_name, response_json) VALUES (?, ?, ?)",
-            (cache_key, subject_name, json.dumps(parsed, ensure_ascii=False)),
+            (content_hash, subject_name, json.dumps(parsed, ensure_ascii=False)),
         )
         db.commit()
         return jsonify(parsed)
@@ -796,22 +878,17 @@ def question_batch():
             question_id = cursor.lastrowid
             imported += 1
 
-            # Auto-analyze if requested and API key is set
+            # Auto-analyze: link knowledge points from cache if available
             if auto_analyze and DEEPSEEK_API_KEY:
                 try:
-                    # Check cache first
-                    cache_key = hashlib.md5(f"{subject_name}:{content_text}".encode()).hexdigest()
                     subj = db.execute("SELECT name FROM subjects WHERE id = ?", (subject_id,)).fetchone()
                     subj_name = subj["name"] if subj else ""
-                    cache_key = hashlib.md5(f"{subj_name}:{content_text}".encode()).hexdigest()
-                    cached = db.execute(
-                        "SELECT response_json FROM api_cache WHERE content_hash = ?", (cache_key,)
+                    _ck = hashlib.md5(f"{subj_name}:{content_text}".encode()).hexdigest()
+                    _cached = db.execute(
+                        "SELECT response_json FROM api_cache WHERE content_hash = ?", (_ck,)
                     ).fetchone()
-                    if cached:
-                        parsed = json.loads(cached["response_json"])
-                    else:
-                        # Call API (simplified version)
-                        parsed = {"matched": [], "suggested": []}
+                    if _cached:
+                        _save_analysis(db, question_id, subject_id, json.loads(_cached["response_json"]))
                 except Exception:
                     pass
 
@@ -946,13 +1023,13 @@ def api_export():
             "knowledge_points": [],
         }
         kps = dicts_from_rows(db.execute("""
-            SELECT kp.name, c.name as chapter_name
+            SELECT kp.name, c.name as chapter_name, qkp.role, qkp.weight
             FROM question_knowledge_points qkp
             JOIN knowledge_points kp ON qkp.knowledge_point_id = kp.id
             JOIN chapters c ON kp.chapter_id = c.id
             WHERE qkp.question_id = ?
         """, (q["id"],)).fetchall())
-        q_data["knowledge_points"] = [{"name": k["name"], "chapter": k["chapter_name"]} for k in kps]
+        q_data["knowledge_points"] = [{"name": k["name"], "chapter": k["chapter_name"], "role": k["role"], "weight": k["weight"]} for k in kps]
         data["questions"].append(q_data)
 
     # Build response in memory
@@ -984,6 +1061,42 @@ def api_import():
         return redirect(url_for("index"))
 
     db = g.db
+
+    # Restore subjects tree if present in the export
+    for subj_data in data.get("subjects", []):
+        subj_name = subj_data.get("name", "").strip()
+        if not subj_name:
+            continue
+        subject = db.execute("SELECT id FROM subjects WHERE name = ?", (subj_name,)).fetchone()
+        if not subject:
+            cursor = db.execute("INSERT INTO subjects (name) VALUES (?)", (subj_name,))
+            subject_id = cursor.lastrowid
+        else:
+            subject_id = subject["id"]
+        for ch_data in subj_data.get("chapters", []):
+            ch_name = ch_data.get("name", "").strip()
+            if not ch_name:
+                continue
+            chapter = db.execute(
+                "SELECT id FROM chapters WHERE name = ? AND subject_id = ?", (ch_name, subject_id)
+            ).fetchone()
+            if not chapter:
+                cursor = db.execute("INSERT INTO chapters (subject_id, name) VALUES (?, ?)", (subject_id, ch_name))
+                chapter_id = cursor.lastrowid
+            else:
+                chapter_id = chapter["id"]
+            for kp_data in ch_data.get("knowledge_points", []):
+                kp_name = kp_data.get("name", "").strip()
+                if not kp_name:
+                    continue
+                kp = db.execute(
+                    "SELECT id FROM knowledge_points WHERE name = ? AND chapter_id = ?", (kp_name, chapter_id)
+                ).fetchone()
+                if not kp:
+                    db.execute("INSERT INTO knowledge_points (chapter_id, name, description) VALUES (?, ?, ?)",
+                               (chapter_id, kp_name, kp_data.get("description")))
+    db.commit()
+
     imported_questions = 0
 
     for q_data in data.get("questions", []):
@@ -1052,9 +1165,11 @@ def api_import():
             else:
                 kp_id = kp["id"]
 
+            role = kp_data.get("role", "primary")
+            weight = max(0.1, min(1.0, float(kp_data.get("weight", 1.0))))
             db.execute(
-                "INSERT OR IGNORE INTO question_knowledge_points (question_id, knowledge_point_id) VALUES (?, ?)",
-                (question_id, kp_id),
+                "INSERT OR IGNORE INTO question_knowledge_points (question_id, knowledge_point_id, role, weight) VALUES (?, ?, ?, ?)",
+                (question_id, kp_id, role, weight),
             )
 
         imported_questions += 1
