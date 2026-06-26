@@ -17,7 +17,7 @@
 |------|------|------|
 | build-web-apps | 前端 UI 重构至 React | 待启动 |
 | neon-postgres | 数据库迁移至云端 | 待启动 |
-| coderabbit | 代码质量审查 | 已用多轮，当前WSL网络问题暂不可用 |
+| coderabbit | 代码质量审查 | 已用多轮，通过 WSL 调用（需代理） |
 
 ---
 
@@ -53,13 +53,13 @@
 ## 待办事项
 
 ### 近期
-- [ ] LaTeX 清理功能测试和完善（用户反馈仍有渲染问题）
+- [x] LaTeX 清理功能完善（支持 noindent/textbf/bigskip/section 等）
 - [ ] DeepSeek API 实际测试（需配置 DEEPSEEK_API_KEY）
-- [ ] 修复 WSL CodeRabbit 网络问题（代理配置）
+- [x] CodeRabbit WSL 调用正常（需代理 172.25.160.1:7890）
 
 ### 远期
 - [ ] React + Vite 前端迁移
-- [ ] Neon Postgres 数据库迁移
+- [ ] Neon Postgres 数据库迁移（多用户场景再考虑）
 - [ ] 复习推荐算法
 - [ ] 用户登录系统
 - [ ] 移动端适配
@@ -75,10 +75,11 @@
 | v1.1.0 | 2026-06-24 | 知识点分级（primary/secondary）、权重、tags |
 | v1.1.1 | 2026-06-24 | 图片上传、AI 题目识别、LaTeX 预览 |
 | - | 2026-06-24 | LaTeX 文档清理、Tags 系统简化 |
+| v1.1.2 | 2026-06-26 | CodeRabbit 审查 8 项修复 + LaTeX 清理增强 |
 
 ---
 
 ## 已知问题
-1. **LaTeX 清理** — 用户反馈清理后仍有渲染问题，需要进一步调试
-2. **CodeRabbit** — WSL 网络代理配置问题，暂时无法使用
+1. ~~**LaTeX 清理** — 已修复，支持 noindent/textbf/bigskip/section 等常见 LaTeX 命令~~
+2. ~~**CodeRabbit** — 已修复，通过 WSL 代理可正常调用~~
 3. **Flask secret_key** — 未配置 FLASK_SECRET_KEY 时 session 不持久

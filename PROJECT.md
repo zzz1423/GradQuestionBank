@@ -330,8 +330,8 @@ wsl -d Ubuntu-24.04 bash -c "cd /mnt/e/Temp/CCC/Codex/GradQuestionBank && /root/
 
 ## 已知问题
 
-1. **LaTeX 清理** — 用户反馈清理后仍有渲染问题，需要进一步调试
-2. **CodeRabbit** — WSL 网络代理配置问题，暂时无法使用
+1. ~~**LaTeX 清理** — 已修复（v1.1.2）~~
+2. ~~**CodeRabbit** — 已修复（v1.1.2）~~
 3. **Flask secret_key** — 未配置 FLASK_SECRET_KEY 时 session 不持久
 
 ## 注意事项
