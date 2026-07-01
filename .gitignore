@@ -16,3 +16,7 @@ Thumbs.db
 *.log
 
 .idea/
+
+# React frontend
+frontend/node_modules/
+frontend/dist/
