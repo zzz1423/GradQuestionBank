@@ -4,7 +4,15 @@ import re
 
 
 def clean_latex(text):
-    """Strip LaTeX document structure, keep renderable content for KaTeX."""
+    """
+    Clean LaTeX source into KaTeX-friendly renderable text.
+    
+    Parameters:
+    	text: The LaTeX text to clean.
+    
+    Returns:
+    	str: The cleaned text with document scaffolding removed, common formatting normalized, and display math converted for KaTeX.
+    """
     if not text:
         return text
 
@@ -43,6 +51,15 @@ def clean_latex(text):
 
     # Convert \begin{align*}...\end{align*} to KaTeX-compatible format
     def convert_align(match):
+        """
+        Wrap an align environment in KaTeX-compatible display math.
+        
+        Parameters:
+        	match: A regex match whose first group contains the align environment content.
+        
+        Returns:
+        	str: The content wrapped as a display-math aligned block.
+        """
         content = match.group(1)
         return '$$\\begin{aligned}' + content + '\\end{aligned}$$'
 
@@ -76,7 +93,12 @@ def clean_latex(text):
 
 
 def extract_latex_formulas(text):
-    """Extract all LaTeX formulas from text for preview."""
+    """
+    Extract LaTeX display and inline formulas from text.
+    
+    Returns:
+    	formulas (list[tuple[str, str]]): A list of ``("display", content)`` and ``("inline", content)`` tuples, where each formula content is stripped of surrounding whitespace.
+    """
     formulas = []
 
     # Find display math: $$...$$

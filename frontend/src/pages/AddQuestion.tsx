@@ -5,6 +5,11 @@ import type { Subject, AnalysisResult } from '../types';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
+/**
+ * Renders the form for creating a new question.
+ *
+ * @returns The add-question page with subject selection, question content, optional image upload, AI analysis, and submission actions.
+ */
 export default function AddQuestion() {
   const navigate = useNavigate();
   const [subjects, setSubjects] = useState<Subject[]>([]);

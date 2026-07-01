@@ -3,6 +3,11 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import type { Subject, Chapter } from '../types';
 
+/**
+ * Displays a subject's details and manages its chapters.
+ *
+ * @returns The subject detail page.
+ */
 export default function SubjectDetail() {
   const { id } = useParams();
   const subjectId = Number(id);

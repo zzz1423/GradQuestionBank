@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import type { Subject } from '../types';
 
+/**
+ * Renders the subject management page.
+ *
+ * Displays the current subject list, lets users add a subject, and allows deleting an existing subject after confirmation.
+ */
 export default function Subjects() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [name, setName] = useState('');

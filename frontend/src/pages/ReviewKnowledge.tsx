@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import type { Question, KnowledgePoint, ReviewData } from '../types';
@@ -7,6 +7,11 @@ interface SelectedKP {
   id: number; name: string; chapter: string; role: string; weight: number;
 }
 
+/**
+ * Renders the knowledge-point review page for a question.
+ *
+ * @returns The review interface for loading, editing, and saving knowledge-point associations.
+ */
 export default function ReviewKnowledge() {
   const { id } = useParams();
   const qId = Number(id);

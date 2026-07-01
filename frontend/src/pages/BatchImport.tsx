@@ -3,6 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import type { Subject } from '../types';
 
+/**
+ * Renders the batch import page for adding multiple questions to a subject.
+ *
+ * The page loads available subjects, accepts batch-formatted question content with an optional source, and submits the form to create the questions.
+ */
 export default function BatchImport() {
   const navigate = useNavigate();
   const [subjects, setSubjects] = useState<Subject[]>([]);

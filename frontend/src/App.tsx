@@ -15,6 +15,9 @@ import BatchImport from './pages/BatchImport';
 import Statistics from './pages/Statistics';
 import './App.css';
 
+/**
+ * Defines the application's routed page structure.
+ */
 export default function App() {
   return (
     <BrowserRouter>

@@ -1,5 +1,13 @@
 const BASE = '';
 
+/**
+ * Sends a request to the API and parses the JSON response.
+ *
+ * @param url - Request path relative to the API base URL.
+ * @param init - Fetch request options.
+ * @returns The parsed JSON response body.
+ * @throws Error when the response status is not OK.
+ */
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE + url, init);
   if (!res.ok) {
@@ -9,6 +17,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+/**
+ * Builds a query string from the given parameters.
+ *
+ * @param params - Key-value pairs to include in the query string
+ * @returns A query string prefixed with `?`, or an empty string when no values are included
+ */
 function qs(params: Record<string, string | number | undefined | null>): string {
   const s = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {

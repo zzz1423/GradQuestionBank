@@ -2,6 +2,11 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api';
 
+/**
+ * Renders the application shell with navigation, import/export actions, and transient toast feedback.
+ *
+ * @param children - Routed page content to display in the main area.
+ */
 export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const isActive = (prefix: string) =>

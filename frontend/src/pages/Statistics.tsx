@@ -5,6 +5,13 @@ import { Chart, DoughnutController, BarController, ArcElement, BarElement, Categ
 
 Chart.register(DoughnutController, BarController, ArcElement, BarElement, CategoryScale, LinearScale, Legend, Tooltip);
 
+/**
+ * Renders the statistics dashboard.
+ *
+ * Displays mastery distribution and subject mastery charts, along with a table of the weakest knowledge points from the fetched statistics data.
+ *
+ * @returns The statistics page content.
+ */
 export default function Statistics() {
   const [masteryDist, setMasteryDist] = useState<MasteryDist[]>([]);
   const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);

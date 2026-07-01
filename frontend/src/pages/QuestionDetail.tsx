@@ -3,6 +3,11 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { MASTERY_LABELS, MASTERY_COLORS, type Question, type KnowledgePoint, type Tag } from '../types';
 
+/**
+ * Displays the details of a question and its related knowledge points.
+ *
+ * @returns The question detail page.
+ */
 export default function QuestionDetail() {
   const { id } = useParams();
   const qId = Number(id);

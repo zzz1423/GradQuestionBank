@@ -3,6 +3,12 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import type { Subject, Question } from '../types';
 
+/**
+ * Renders the question editing page for the current route question.
+ *
+ * Loads the available subjects and the question details, pre-fills the form,
+ * and saves the updated question before navigating back to the question view.
+ */
 export default function EditQuestion() {
   const { id } = useParams();
   const qId = Number(id);

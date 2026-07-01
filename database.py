@@ -18,7 +18,12 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "grad
 # ── Connection helpers ─────────────────────────────────────
 
 def get_db():
-    """Get a database connection."""
+    """
+    Open a database connection for the configured backend.
+    
+    Returns:
+    	conn: A database connection configured for PostgreSQL when `NEON_DATABASE_URL` is set, or SQLite otherwise.
+    """
     if USE_POSTGRES:
         import psycopg2
         import psycopg2.extras
@@ -35,7 +40,11 @@ def get_db():
 
 
 def _adapt_sql(sql):
-    """Convert SQLite-style SQL to Postgres-compatible SQL."""
+    """Adapt SQLite-style SQL for PostgreSQL.
+    
+    Returns:
+        str: The original SQL when SQLite is in use, otherwise a PostgreSQL-compatible version of the SQL.
+    """
     if not USE_POSTGRES:
         return sql
     # Replace ? placeholders with %s
@@ -51,7 +60,16 @@ def _adapt_sql(sql):
 
 
 def _execute(conn, sql, params=None):
-    """Execute SQL with appropriate cursor and return it."""
+    """
+    Execute a SQL statement and return the resulting cursor.
+    
+    Parameters:
+    	sql (str): The SQL statement to execute.
+    	params: Parameters bound to the statement.
+    
+    Returns:
+    	cursor: A cursor for the executed statement.
+    """
     adapted = _adapt_sql(sql)
     if USE_POSTGRES:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -63,7 +81,12 @@ def _execute(conn, sql, params=None):
 
 
 def _fetchone(cur):
-    """Fetch one row as dict."""
+    """
+    Fetch a single row as a dictionary.
+    
+    Returns:
+    	row (dict | None): The fetched row as a dictionary, or None if no row is available.
+    """
     if USE_POSTGRES:
         row = cur.fetchone()
         if row is None:
@@ -77,7 +100,12 @@ def _fetchone(cur):
 
 
 def _fetchall(cur):
-    """Fetch all rows as list of dicts."""
+    """
+    Fetch all rows from a cursor as dictionaries.
+    
+    Returns:
+    	rows (list[dict]): A list of rows, or an empty list if the cursor has no results.
+    """
     if USE_POSTGRES:
         rows = cur.fetchall()
         return [dict(r) for r in rows]
@@ -87,7 +115,12 @@ def _fetchall(cur):
 
 
 def _lastrowid(cur, conn=None):
-    """Get the last inserted row ID."""
+    """
+    Get the identifier of the most recently inserted row.
+    
+    Returns:
+    	last_row_id: The inserted row identifier, or `None` if no row ID is available.
+    """
     if USE_POSTGRES:
         # With Postgres, use RETURNING id in INSERT statements
         row = cur.fetchone()
@@ -100,7 +133,11 @@ def _lastrowid(cur, conn=None):
 
 
 def _migrate(conn):
-    """Add missing columns to existing tables (schema migration)."""
+    """
+    Adds missing migration columns to existing question-knowledge-points rows.
+    
+    Adds the `role` and `weight` columns to `question_knowledge_points` when they are not already present. Migration failures are ignored.
+    """
     migrations = [
         ("question_knowledge_points", "role", "TEXT DEFAULT 'primary'"),
         ("question_knowledge_points", "weight", "REAL DEFAULT 1.0"),
@@ -127,7 +164,12 @@ def _migrate(conn):
 
 
 def init_db():
-    """Create tables if they don't exist."""
+    """
+    Create the database schema and apply pending column migrations.
+    
+    Initializes the tables for the active database backend and then adds any missing
+    migration columns before closing the connection.
+    """
     conn = get_db()
 
     if USE_POSTGRES:
@@ -141,7 +183,11 @@ def init_db():
 
 
 def _init_sqlite(conn):
-    """SQLite schema creation."""
+    """
+    Create the SQLite tables used by the application.
+    
+    Creates the subject, chapter, knowledge point, question, tag, question-tag, API cache, and question-knowledge-point tables, then commits the schema changes.
+    """
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS subjects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -216,7 +262,11 @@ def _init_sqlite(conn):
 
 
 def _init_postgres(conn):
-    """Postgres schema creation."""
+    """
+    Create the PostgreSQL schema tables.
+    
+    Creates the core tables used by subjects, chapters, knowledge points, questions, tags, question-tag links, API cache entries, and question-knowledge point links, then commits the transaction.
+    """
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS subjects (
@@ -337,7 +387,11 @@ SEED_DATA = {
 
 
 def seed_db():
-    """Insert preset subjects, chapters, and knowledge points if empty."""
+    """
+    Populate the preset subjects, chapters, and knowledge points when the database is empty.
+    
+    The seed data is inserted only if `subjects` contains no rows.
+    """
     conn = get_db()
     cur = _execute(conn, "SELECT COUNT(*) as cnt FROM subjects")
     count = _fetchone(cur)["cnt"]
@@ -382,7 +436,15 @@ def seed_db():
 # ── Legacy helpers (for backward compatibility) ───────────
 
 def dict_from_row(row):
-    """Convert a sqlite3.Row to a plain dict."""
+    """
+    Convert a row object to a plain dictionary.
+    
+    Parameters:
+    	row: A row-like object or an existing dictionary.
+    
+    Returns:
+    	dict | None: The row as a dictionary, or `None` when `row` is `None`.
+    """
     if row is None:
         return None
     if isinstance(row, dict):
@@ -391,7 +453,15 @@ def dict_from_row(row):
 
 
 def dicts_from_rows(rows):
-    """Convert a list of rows to a list of dicts."""
+    """
+    Convert a sequence of rows to a list of dictionaries.
+    
+    Parameters:
+    	rows: Rows returned from a database query.
+    
+    Returns:
+    	list[dict]: An empty list if no rows were provided; otherwise a list of dictionaries, or the original list when its items are already dictionaries.
+    """
     if not rows:
         return []
     if isinstance(rows[0], dict):

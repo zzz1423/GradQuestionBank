@@ -41,10 +41,19 @@ PH = "%s" if USE_POSTGRES else "?"
 
 @app.before_request
 def before_request():
+    """
+    Attach a database connection to the current request context.
+    """
     g.db = get_db()
 
 @app.teardown_request
 def teardown_request(exc):
+    """
+    Closes the request database connection after each request.
+    
+    Parameters:
+    	exc: The exception raised during request handling, if any.
+    """
     db = g.pop("db", None)
     if db is not None:
         db.close()
@@ -53,6 +62,16 @@ def teardown_request(exc):
 # -- Helpers ---------------------------------------------------------------
 
 def _safe_weight(val, default=1.0):
+    """
+    Clamp a weight value to the supported range.
+    
+    Parameters:
+    	val: Value to convert to a floating-point weight.
+    	default: Value to return when conversion fails.
+    
+    Returns:
+    	float: A weight between 0.1 and 1.0, or the default value if conversion fails.
+    """
     try:
         return max(0.1, min(1.0, float(val)))
     except (ValueError, TypeError):
@@ -60,6 +79,16 @@ def _safe_weight(val, default=1.0):
 
 
 def _insert_or_ignore_sql(table, columns):
+    """
+    Build an insert statement that ignores duplicate rows.
+    
+    Parameters:
+    	table (str): Target table name.
+    	columns (Sequence[str]): Column names to include in the insert.
+    
+    Returns:
+    	str: An SQL statement that inserts the specified columns and skips conflicts.
+    """
     cols = ", ".join(columns)
     phs = ", ".join([PH] * len(columns))
     if USE_POSTGRES:
@@ -68,6 +97,17 @@ def _insert_or_ignore_sql(table, columns):
 
 
 def _insert_returning_id(conn, sql, params):
+    """
+    Insert a row and return its generated ID.
+    
+    Parameters:
+    	conn: Database connection used to execute the insert.
+    	sql: The INSERT statement to execute.
+    	params: Parameters for the INSERT statement.
+    
+    Returns:
+    	int | None: The inserted row ID, or `None` if no row ID is available.
+    """
     if USE_POSTGRES:
         cur = conn.cursor()
         cur.execute(sql + " RETURNING id", params)
@@ -79,6 +119,18 @@ def _insert_returning_id(conn, sql, params):
 
 
 def _save_analysis(db, question_id, subject_id, parsed):
+    """
+    Persist parsed analysis data for a question.
+    
+    Creates any missing chapters, knowledge points, and tags referenced in the parsed
+    analysis, then links them to the question with the provided role and weight.
+    
+    Parameters:
+    	db: Database connection used for queries and inserts.
+    	question_id: ID of the question to link.
+    	subject_id: ID of the subject used to scope chapter lookup and creation.
+    	parsed: Parsed analysis data containing ``knowledge_points`` and ``tags``.
+    """
     for kp in parsed.get("knowledge_points", []):
         kp_name = kp.get("name", "").strip()
         if not kp_name:
@@ -130,6 +182,12 @@ def _save_analysis(db, question_id, subject_id, parsed):
 
 @app.route("/api/constants")
 def api_constants():
+    """
+    Return mastery label and color constants for the frontend.
+    
+    Returns:
+    	A JSON response containing string-keyed mastery labels and colors, along with the database backend flag.
+    """
     return jsonify({
         "mastery_labels": {str(k): v for k, v in MASTERY_LABELS.items()},
         "mastery_colors": {str(k): v for k, v in MASTERY_COLORS.items()},
@@ -141,6 +199,12 @@ def api_constants():
 
 @app.route("/api/dashboard")
 def api_dashboard():
+    """
+    Return dashboard statistics and recent questions.
+    
+    Returns:
+    	dict: A JSON response containing overall entity counts, mastery-level question counts, and the 10 most recently created questions with their subject names.
+    """
     db = g.db
     stats = {}
     for key, sql in [
@@ -166,6 +230,12 @@ def api_dashboard():
 
 @app.route("/api/subjects")
 def api_subjects_list():
+    """
+    List subjects with aggregate chapter, knowledge point, and question counts.
+    
+    Returns:
+    	A JSON array of subject records, each including chapter_count, kp_count, and question_count.
+    """
     rows = _fetchall(_execute(g.db, """
         SELECT s.*,
                COUNT(DISTINCT c.id) as chapter_count,
@@ -182,6 +252,15 @@ def api_subjects_list():
 
 @app.route("/api/subjects", methods=["POST"])
 def api_subject_add():
+    """
+    Add a new subject.
+    
+    Parameters:
+    	name (str): Subject name.
+    
+    Returns:
+    	A JSON response confirming the new subject, or an error response if the name is empty or the subject already exists.
+    """
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if not name:
@@ -196,6 +275,12 @@ def api_subject_add():
 
 @app.route("/api/subjects/<int:subject_id>", methods=["DELETE"])
 def api_subject_delete(subject_id):
+    """
+    Delete a subject.
+    
+    Returns:
+    	dict: A message confirming the subject was deleted.
+    """
     _execute(g.db, f"DELETE FROM subjects WHERE id = {PH}", (subject_id,))
     g.db.commit()
     return jsonify({"message": "学科已删除"})
@@ -203,6 +288,15 @@ def api_subject_delete(subject_id):
 
 @app.route("/api/subjects/<int:subject_id>")
 def api_subject_detail(subject_id):
+    """
+    Return a subject and its chapters.
+    
+    Parameters:
+    	subject_id (int): The subject identifier.
+    
+    Returns:
+    	A JSON response containing the subject and its chapters, or a 404 error response if the subject does not exist.
+    """
     subject = _fetchone(_execute(g.db,
         f"SELECT * FROM subjects WHERE id = {PH}", (subject_id,)))
     if not subject:
@@ -218,6 +312,15 @@ def api_subject_detail(subject_id):
 
 @app.route("/api/subjects/<int:subject_id>/chapters", methods=["POST"])
 def api_chapter_add(subject_id):
+    """
+    Add a chapter to a subject.
+    
+    Parameters:
+    	subject_id (int): The subject to add the chapter to.
+    
+    Returns:
+    	Response: A JSON response with a success message, or an error response if the chapter name is empty.
+    """
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if not name:
@@ -236,6 +339,11 @@ def api_chapter_add(subject_id):
 
 @app.route("/api/chapters/<int:chapter_id>")
 def api_chapter_detail(chapter_id):
+    """
+    Get a chapter and its knowledge points.
+    
+    Returns the chapter with its subject information and the chapter's knowledge points, each including a linked question count.
+    """
     chapter = _fetchone(_execute(g.db, f"""
         SELECT c.*, s.name as subject_name, s.id as subject_id
         FROM chapters c JOIN subjects s ON c.subject_id = s.id
@@ -255,6 +363,14 @@ def api_chapter_detail(chapter_id):
 
 @app.route("/api/chapters/<int:chapter_id>", methods=["DELETE"])
 def api_chapter_delete(chapter_id):
+    """
+    Delete a chapter.
+    
+    Returns the parent subject ID when the chapter is removed, or a 404 error if the chapter does not exist.
+    
+    Returns:
+    	Response data containing a success message and subject ID, or an error response with status 404.
+    """
     row = _fetchone(_execute(g.db,
         f"SELECT subject_id FROM chapters WHERE id = {PH}", (chapter_id,)))
     if row:
@@ -266,6 +382,15 @@ def api_chapter_delete(chapter_id):
 
 @app.route("/api/chapters/<int:chapter_id>/kps", methods=["POST"])
 def api_kp_add(chapter_id):
+    """
+    Add a knowledge point to a chapter.
+    
+    Parameters:
+    	chapter_id (int): The chapter identifier.
+    
+    Returns:
+    	A JSON response containing a success message, or an error response if the knowledge point name is empty.
+    """
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     desc = (data.get("description") or "").strip()
@@ -285,6 +410,14 @@ def api_kp_add(chapter_id):
 
 @app.route("/api/kps/<int:kp_id>", methods=["DELETE"])
 def api_kp_delete(kp_id):
+    """
+    Delete a knowledge point.
+    
+    Returns the deleted knowledge point's chapter ID when the record exists.
+    
+    Returns:
+    	a response containing a success message and the chapter ID, or a 404 error response if the knowledge point does not exist.
+    """
     row = _fetchone(_execute(g.db, f"""
         SELECT c.id as chapter_id FROM knowledge_points kp
         JOIN chapters c ON kp.chapter_id = c.id WHERE kp.id = {PH}
@@ -300,6 +433,12 @@ def api_kp_delete(kp_id):
 
 @app.route("/api/questions")
 def api_questions_list():
+    """
+    Return questions filtered by subject, chapter, knowledge point, mastery, and search text.
+    
+    Returns:
+    	result (dict): A JSON response containing the matching questions, all subjects, the subject's chapters when a subject is selected, and the applied filter values.
+    """
     db = g.db
     subject_id = request.args.get("subject_id", type=int)
     chapter_id = request.args.get("chapter_id", type=int)
@@ -369,6 +508,12 @@ def api_questions_list():
 
 @app.route("/api/questions", methods=["POST"])
 def api_question_add():
+    """
+    Create a question record.
+    
+    Returns:
+    	response: A JSON response containing the new question ID and a success message, or an error response if the question content is empty.
+    """
     db = g.db
     data = request.get_json(silent=True) or {}
     subject_id = data.get("subject_id")
@@ -388,6 +533,14 @@ def api_question_add():
 
 @app.route("/api/questions/batch", methods=["POST"])
 def api_question_batch():
+    """
+    Import multiple questions from a single text block.
+    
+    The input is split into separate questions using `---` as a delimiter. If a block contains an `答案:` or `答案：` line, the text before it is saved as the question content and the text after it is saved as the answer. When enabled, cached AI analysis is also applied to newly imported questions.
+    
+    Returns:
+    	A JSON response containing the number of questions imported.
+    """
     db = g.db
     data = request.get_json(silent=True) or {}
     subject_id = data.get("subject_id")
@@ -437,6 +590,15 @@ def api_question_batch():
 
 @app.route("/api/questions/<int:question_id>")
 def api_question_detail(question_id):
+    """
+    Return a question with its linked knowledge points and tags.
+    
+    Parameters:
+    	question_id (int): The question identifier.
+    
+    Returns:
+    	Dict: A JSON response containing the question, linked knowledge points, and tags. Returns a 404 response if the question does not exist.
+    """
     db = g.db
     question = _fetchone(_execute(db, f"""
         SELECT q.*, s.name as subject_name
@@ -464,6 +626,15 @@ def api_question_detail(question_id):
 
 @app.route("/api/questions/<int:question_id>", methods=["PUT"])
 def api_question_edit(question_id):
+    """
+    Update a question's subject, content, answer, and source.
+    
+    Parameters:
+    	question_id (int): The question to update.
+    
+    Returns:
+    	dict: A JSON response with a confirmation message, or an error message if the content is empty.
+    """
     db = g.db
     data = request.get_json(silent=True) or {}
     subject_id = data.get("subject_id")
@@ -485,6 +656,15 @@ def api_question_edit(question_id):
 
 @app.route("/api/questions/<int:question_id>", methods=["DELETE"])
 def api_question_delete(question_id):
+    """
+    Delete a question.
+    
+    Parameters:
+    	question_id (int): The question identifier.
+    
+    Returns:
+    	A JSON response containing a confirmation message.
+    """
     _execute(g.db, f"DELETE FROM questions WHERE id = {PH}", (question_id,))
     g.db.commit()
     return jsonify({"message": "题目已删除"})
@@ -492,6 +672,12 @@ def api_question_delete(question_id):
 
 @app.route("/api/questions/<int:question_id>/mastery", methods=["POST"])
 def api_question_mastery(question_id):
+    """
+    Update a question's mastery level.
+    
+    Returns:
+    	A JSON response confirming the updated mastery label, or an error response if the level is invalid.
+    """
     data = request.get_json(silent=True) or {}
     level = data.get("level")
     if level not in (0, 1, 2, 3):
@@ -507,6 +693,15 @@ def api_question_mastery(question_id):
 
 @app.route("/api/questions/<int:question_id>/review")
 def api_question_review(question_id):
+    """
+    Return the data needed to review a question's knowledge-point links.
+    
+    Parameters:
+    	question_id (int): The question identifier.
+    
+    Returns:
+    	dict: A JSON response containing the question, all knowledge points for its subject, and the currently linked knowledge points, or a 404 error if the question does not exist.
+    """
     db = g.db
     question = _fetchone(_execute(db, f"""
         SELECT q.*, s.name as subject_name
@@ -536,6 +731,15 @@ def api_question_review(question_id):
 
 @app.route("/api/questions/<int:question_id>/review", methods=["POST"])
 def api_question_review_save(question_id):
+    """
+    Save the knowledge point and tag associations for a question.
+    
+    Parameters:
+    	question_id (int): The question to update.
+    
+    Returns:
+    	JSON response containing a confirmation message.
+    """
     db = g.db
     data = request.get_json(silent=True) or {}
     kps = data.get("knowledge_points", [])
@@ -574,6 +778,12 @@ def api_question_review_save(question_id):
 
 @app.route("/api/analyze-question", methods=["POST"])
 def api_analyze_question():
+    """
+    Analyze a question with DeepSeek and return structured JSON.
+    
+    Returns:
+    	A JSON response containing the parsed analysis, including cleaned content, LaTeX content, answer, knowledge points, and tags. Returns an error response if the DeepSeek API key is missing, the API call fails, or the response cannot be parsed.
+    """
     db = g.db
     data = request.get_json(silent=True) or {}
     text_content = (data.get("content") or "").strip()
@@ -682,7 +892,12 @@ def api_analyze_question():
 
 @app.route("/api/analyze", methods=["POST"])
 def api_analyze():
-    """Text-only analysis (legacy compat)."""
+    """
+    Analyze a text question with the legacy DeepSeek prompt.
+    
+    Returns:
+    	JSON with extracted knowledge points and tags, or an error response when analysis fails or the API key is missing.
+    """
     db = g.db
     data = request.get_json(silent=True) or {}
     content = (data.get("content") or "").strip()
@@ -760,6 +975,12 @@ def api_analyze():
 
 @app.route("/api/statistics")
 def api_statistics():
+    """
+    Compute question mastery statistics and weak knowledge points.
+    
+    Returns:
+    	stats (dict): A JSON object containing mastery distribution, weighted weak-point rankings, and subject mastery counts.
+    """
     db = g.db
 
     mastery_dist = _fetchall(_execute(db,
@@ -832,6 +1053,12 @@ def api_statistics():
 
 @app.route("/api/export")
 def api_export():
+    """
+    Export the full question bank as a JSON file download.
+    
+    Returns:
+    	A file response containing the exported subjects, chapters, knowledge points, and questions.
+    """
     db = g.db
     data = {"exported_at": datetime.now().isoformat(), "subjects": [], "questions": []}
 
@@ -892,6 +1119,12 @@ def api_export():
 
 @app.route("/api/import", methods=["POST"])
 def api_import():
+    """
+    Import subjects, chapters, knowledge points, and questions from JSON data.
+    
+    Returns:
+    	Response data containing the number of imported questions.
+    """
     db = g.db
 
     if "file" in request.files:
@@ -1014,12 +1247,21 @@ def api_import():
 
 @app.route("/")
 def serve_index():
+    """
+    Serve the React app entry page.
+    """
     return send_from_directory(DIST_DIR, "index.html")
 
 
 @app.route("/<path:path>")
 def serve_static(path):
     # Don't intercept API routes
+    """
+    Serve a built frontend asset or the SPA entry point.
+    
+    Parameters:
+    	path (str): Request path relative to the frontend distribution directory.
+    """
     if path.startswith("api/"):
         return jsonify({"error": "Not found"}), 404
     # If the path matches a file in dist, serve it

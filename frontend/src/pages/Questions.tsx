@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { MASTERY_LABELS, MASTERY_COLORS, type Question, type Subject, type Chapter } from '../types';
 
+/**
+ * Displays the question list with filters and navigation actions.
+ */
 export default function Questions() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);

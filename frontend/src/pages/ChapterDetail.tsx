@@ -1,8 +1,13 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import type { Chapter, KnowledgePoint } from '../types';
 
+/**
+ * Displays a chapter's knowledge points and lets users add or delete them.
+ *
+ * @returns The chapter detail page.
+ */
 export default function ChapterDetail() {
   const { id } = useParams();
   const chapterId = Number(id);

@@ -1,8 +1,16 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { MASTERY_LABELS, MASTERY_COLORS, type DashboardData, type Question } from '../types';
 
+/**
+ * Displays the question bank dashboard.
+ *
+ * Renders a loading spinner until dashboard data is available, then shows summary statistics,
+ * navigation actions, and a list of recently added questions or an empty state.
+ *
+ * @returns The dashboard page content.
+ */
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
 
