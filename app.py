@@ -69,9 +69,15 @@ def _get_setting(key, default=""):
 
 def _set_setting(key, value):
     """Set a setting value in the database."""
-    _execute(g.db,
-        f"INSERT OR REPLACE INTO settings (key, value) VALUES ({PH}, {PH})",
-        (key, value))
+    if USE_POSTGRES:
+        _execute(g.db,
+            "INSERT INTO settings (key, value) VALUES (%s, %s) "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+            (key, value))
+    else:
+        _execute(g.db,
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            (key, value))
     g.db.commit()
 
 
@@ -661,13 +667,10 @@ def api_analyze_question():
 
     messages = [{"role": "system", "content": prompt}]
     if image_base64:
-        # Image provided - but DeepSeek doesn't support vision
-        # Use OCR-extracted text instead (frontend handles OCR via Tesseract.js)
-        # If content is empty but image was uploaded, ask user to provide text
-        if not text_content:
-            messages.append({"role": "user", "content": "请分析这道题目涉及的知识点。题目内容待用户填写。"})
-        else:
-            messages.append({"role": "user", "content": text_content})
+        # Image provided but no text - reject
+        return jsonify({"error": "请先输入题目内容，或使用 OCR 识别图片中的文字"}), 400
+    else:
+        messages.append({"role": "user", "content": text_content})
     else:
         messages.append({"role": "user", "content": text_content})
 
@@ -772,7 +775,7 @@ def api_analyze():
         resp = http_requests.post(
             config["api_url"],
             headers={
-                "Authorization": f"Bearer {config["api_key"]}",
+                "Authorization": "Bearer " + config["api_key"],
                 "Content-Type": "application/json",
             },
             json={
@@ -1113,7 +1116,7 @@ def api_settings_test():
         resp = http_requests.post(
             config["api_url"],
             headers={
-                "Authorization": f"Bearer {config['api_key']}",
+                "Authorization": "Bearer " + config["api_key"],
                 "Content-Type": "application/json",
             },
             json={

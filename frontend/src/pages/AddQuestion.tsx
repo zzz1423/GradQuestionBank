@@ -115,6 +115,7 @@ export default function AddQuestion() {
     try {
       const subjName = subjects.find(s => String(s.id) === subjectId)?.name || '';
       const result = await api.analyzeQuestion({ content, subject_name: subjName }) as AnalysisResult;
+      if (result.error) { setAiError(result.error); return; }
       if (result.latex_content) setContent(result.latex_content);
       if (result.answer && !answer) setAnswer(result.answer);
       // Convert AI result to selected KPs
@@ -233,7 +234,7 @@ export default function AddQuestion() {
         <div className="row g-3 mb-3">
           <div className="col-md-6">
             <label className="form-label">学科 <span className="text-danger">*</span></label>
-            <select className="form-select" required value={subjectId} onChange={e => setSubjectId(e.target.value)}>
+            <select className="form-select" required value={subjectId} onChange={e => { setSubjectId(e.target.value); setSelectedKps([]); }}>
               <option value="">请选择学科</option>
               {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
@@ -248,16 +249,16 @@ export default function AddQuestion() {
           <div className="col-md-6">
             <div className="d-flex justify-content-between align-items-center mb-1">
               <label className="form-label mb-0">上传题目图片（可选）</label>
-              {imageBase64 && (
                 <div className="d-flex gap-1">
-                  <button type="button" className="btn btn-sm btn-outline-primary" onClick={ocrImage} disabled={ocrLoading}>
-                    {ocrLoading ? <><span className="spinner-border spinner-border-sm"></span> 识别中...</> : <><i className="bi bi-upc-scan"></i> OCR 识别</>}
-                  </button>
+                  {imageBase64 && (
+                    <button type="button" className="btn btn-sm btn-outline-primary" onClick={ocrImage} disabled={ocrLoading}>
+                      {ocrLoading ? <><span className="spinner-border spinner-border-sm"></span> 识别中...</> : <><i className="bi bi-upc-scan"></i> OCR 识别</>}
+                    </button>
+                  )}
                   <button type="button" className="btn btn-sm btn-primary" onClick={analyze} disabled={aiLoading || !content.trim()}>
                     {aiLoading ? <><span className="spinner-border spinner-border-sm"></span> 分析中...</> : <><i className="bi bi-stars"></i> AI 分析知识点</>}
                   </button>
                 </div>
-              )}
             </div>
             {imageBase64 ? (
               <>
