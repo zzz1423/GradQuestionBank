@@ -212,6 +212,11 @@ def _init_sqlite(conn):
             FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
             FOREIGN KEY (knowledge_point_id) REFERENCES knowledge_points(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
     """)
     conn.commit()
 
@@ -287,6 +292,11 @@ def _init_postgres(conn):
             PRIMARY KEY (question_id, knowledge_point_id),
             FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
             FOREIGN KEY (knowledge_point_id) REFERENCES knowledge_points(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
         );
     """)
     conn.commit()

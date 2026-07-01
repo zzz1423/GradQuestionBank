@@ -58,6 +58,44 @@ def _safe_weight(val, default=1.0):
     except (ValueError, TypeError):
         return default
 
+def _get_setting(key, default=""):
+    """Get a setting value from the database."""
+    try:
+        row = _fetchone(_execute(g.db, f"SELECT value FROM settings WHERE key = {PH}", (key,)))
+        return row["value"] if row else default
+    except Exception:
+        return default
+
+
+def _set_setting(key, value):
+    """Set a setting value in the database."""
+    _execute(g.db,
+        f"INSERT OR REPLACE INTO settings (key, value) VALUES ({PH}, {PH})",
+        (key, value))
+    g.db.commit()
+
+
+def _get_ai_config():
+    """Get AI configuration from database settings, with env var fallback."""
+    provider = _get_setting("ai_provider", "deepseek")
+    api_key = _get_setting("api_key", "")
+    api_url = _get_setting("api_url", "")
+
+    # Fallback to environment variables
+    if not api_key:
+        api_key = DEEPSEEK_API_KEY
+    if not api_url:
+        api_url = DEEPSEEK_API_URL
+
+    return {
+        "provider": provider,
+        "api_key": api_key,
+        "api_url": api_url,
+        "model": _get_setting("ai_model", "deepseek-chat"),
+    }
+
+
+
 
 def _insert_or_ignore_sql(table, columns):
     cols = ", ".join(columns)
@@ -580,8 +618,9 @@ def api_analyze_question():
     image_base64 = data.get("image", "")
     subject_name = (data.get("subject_name") or "").strip()
 
-    if not DEEPSEEK_API_KEY:
-        return jsonify({"error": "未配置 DEEPSEEK_API_KEY 环境变量"}), 400
+    config = _get_ai_config()
+    if not config["api_key"]:
+        return jsonify({"error": "请在设置页面配置 API Key"}), 400
 
     subjects = _fetchall(_execute(db, "SELECT * FROM subjects"))
     kps_context = ""
@@ -634,13 +673,13 @@ def api_analyze_question():
 
     try:
         resp = http_requests.post(
-            DEEPSEEK_API_URL,
+            config["api_url"],
             headers={
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                "Authorization": f"Bearer {config["api_key"]}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": "deepseek-chat",
+                "model": config["model"],
                 "messages": messages,
                 "temperature": 0.3,
                 "max_tokens": 4096,
@@ -688,8 +727,9 @@ def api_analyze():
     content = (data.get("content") or "").strip()
     subject_name = (data.get("subject_name") or "").strip()
 
-    if not DEEPSEEK_API_KEY:
-        return jsonify({"error": "未配置 DEEPSEEK_API_KEY"}), 400
+    config = _get_ai_config()
+    if not config["api_key"]:
+        return jsonify({"error": "请在设置页面配置 API Key"}), 400
 
     subjects = _fetchall(_execute(db, "SELECT * FROM subjects"))
     kps_context = ""
@@ -722,13 +762,13 @@ def api_analyze():
 
     try:
         resp = http_requests.post(
-            DEEPSEEK_API_URL,
+            config["api_url"],
             headers={
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                "Authorization": f"Bearer {config["api_key"]}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": "deepseek-chat",
+                "model": config["model"],
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
             },
@@ -1008,6 +1048,77 @@ def api_import():
     db.commit()
     return jsonify({"message": f"成功导入 {imported} 道题目", "count": imported})
 
+
+
+
+# -- Settings ---------------------------------------------------------------
+
+@app.route("/api/settings")
+def api_settings_get():
+    """Get all settings (masks API key for security)."""
+    db = g.db
+    settings = {}
+    try:
+        rows = _fetchall(_execute(db, "SELECT key, value FROM settings"))
+        for row in rows:
+            if row["key"] == "api_key" and row["value"]:
+                settings[row["key"]] = row["value"][:8] + "****" if len(row["value"]) > 8 else "****"
+            else:
+                settings[row["key"]] = row["value"]
+    except Exception:
+        pass
+
+    # Add env var defaults
+    settings.setdefault("ai_provider", "deepseek")
+    settings.setdefault("api_url", DEEPSEEK_API_URL)
+    settings.setdefault("ai_model", "deepseek-chat")
+
+    return jsonify(settings)
+
+
+@app.route("/api/settings", methods=["POST"])
+def api_settings_save():
+    """Save settings."""
+    db = g.db
+    data = request.get_json(silent=True) or {}
+
+    allowed_keys = {"ai_provider", "api_key", "api_url", "ai_model"}
+    for key, value in data.items():
+        if key in allowed_keys and isinstance(value, str):
+            _set_setting(key, value)
+
+    return jsonify({"message": "设置已保存"})
+
+
+@app.route("/api/settings/test", methods=["POST"])
+def api_settings_test():
+    """Test AI connection."""
+    db = g.db
+    config = _get_ai_config()
+
+    if not config["api_key"]:
+        return jsonify({"success": False, "error": "未配置 API Key"}), 400
+
+    try:
+        resp = http_requests.post(
+            config["api_url"],
+            headers={
+                "Authorization": f"Bearer {config['api_key']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": config["model"],
+                "messages": [{"role": "user", "content": "Hello, respond with 'ok' only."}],
+                "max_tokens": 10,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        reply = result["choices"][0]["message"]["content"].strip()
+        return jsonify({"success": True, "message": f"连接成功！回复: {reply}"})
+    except Exception as e:
+        return jsonify({"success": False, "error": f"连接失败: {e}"}), 500
 
 
 # -- Static files for React frontend ----------------------------------------

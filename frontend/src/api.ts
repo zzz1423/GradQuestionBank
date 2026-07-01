@@ -61,6 +61,11 @@ export const api = {
   analyze: (data: Record<string, unknown>) =>
     request('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   statistics: () => request<Record<string, unknown>>('/api/statistics'),
+  // Settings
+  getSettings: () => request<Record<string, string>>('/api/settings'),
+  saveSettings: (data: Record<string, string>) =>
+    request('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  testSettings: () => request<{ success: boolean; message?: string; error?: string }>('/api/settings/test', { method: 'POST' }),
   exportUrl: '/api/export',
   importFile: async (file: File) => {
     const fd = new FormData();

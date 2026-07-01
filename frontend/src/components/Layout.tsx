@@ -59,6 +59,11 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <i className="bi bi-bar-chart"></i> 统计分析
               </Link>
             </li>
+            <li className="nav-item">
+              <Link className={`nav-link ${location.pathname === '/settings' ? 'active' : ''}`} to="/settings">
+                <i className="bi bi-gear"></i> 设置
+              </Link>
+            </li>
             <hr />
             <li className="nav-item">
               <a className="nav-link" href={api.exportUrl}>
@@ -88,6 +93,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                   <li><Link className="nav-link" to="/subjects">学科管理</Link></li>
                   <li><Link className="nav-link" to="/questions">题目列表</Link></li>
                   <li><Link className="nav-link" to="/statistics">统计分析</Link></li>
+                  <li><Link className="nav-link" to="/settings">设置</Link></li>
                 </ul>
               </div>
             </div>

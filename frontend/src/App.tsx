@@ -13,6 +13,7 @@ import EditQuestion from './pages/EditQuestion';
 import ReviewKnowledge from './pages/ReviewKnowledge';
 import BatchImport from './pages/BatchImport';
 import Statistics from './pages/Statistics';
+import Settings from './pages/Settings';
 import './App.css';
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/questions/:id/edit" element={<EditQuestion />} />
           <Route path="/questions/:id/review" element={<ReviewKnowledge />} />
           <Route path="/statistics" element={<Statistics />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>
     </BrowserRouter>
