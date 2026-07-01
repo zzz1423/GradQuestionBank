@@ -636,8 +636,8 @@ def api_analyze_question():
             kp_names = ", ".join(k["name"] for k in kps)
             kps_context += f"  {ch['name']}: {kp_names}\n"
 
-    cache_key = hashlib.md5(f"{subject_name}:{text_content}".encode()).hexdigest()
-    if text_content and not image_base64:
+    cache_key = hashlib.md5(f"{subject_name}:{text_content}".encode()).hexdigest() if text_content else None
+    if text_content and cache_key:
         cached = _fetchone(_execute(db,
             f"SELECT response_json FROM api_cache WHERE content_hash = {PH}",
             (cache_key,)))
@@ -661,33 +661,13 @@ def api_analyze_question():
 
     messages = [{"role": "system", "content": prompt}]
     if image_base64:
-        # Build image content for vision API
-        vision_content = []
-        vision_content.append({"type": "image_url", "image_url": {"url": image_base64}})
-        
-        # OCR prompt - extract question and answer separately
-        ocr_prompt = """请仔细分析这张图片中的题目，完成以下任务：
-
-1. **题目内容**：将图片中的题目完整提取出来，保留所有数学公式（用LaTeX格式，行内用 $...$，独立公式用 $$...$$）
-2. **答案**：提取题目对应的答案（只填答案本身，不要解析过程）
-
-请严格按以下JSON格式返回：
-{
-    "content": "提取的题目内容（含LaTeX公式）",
-    "answer": "答案"
-}
-
-注意：
-- 数学公式必须用LaTeX格式
-- 如果图片中有多道题，只提取第一道完整的题目
-- 答案只填最终结果"""
-        
-        vision_content.append({"type": "text", "text": ocr_prompt})
-        
-        messages.append({
-            "role": "user",
-            "content": vision_content,
-        })
+        # Image provided - but DeepSeek doesn't support vision
+        # Use OCR-extracted text instead (frontend handles OCR via Tesseract.js)
+        # If content is empty but image was uploaded, ask user to provide text
+        if not text_content:
+            messages.append({"role": "user", "content": "请分析这道题目涉及的知识点。题目内容待用户填写。"})
+        else:
+            messages.append({"role": "user", "content": text_content})
     else:
         messages.append({"role": "user", "content": text_content})
 
@@ -703,7 +683,7 @@ def api_analyze_question():
         resp = http_requests.post(
             config["api_url"],
             headers={
-                "Authorization": f"Bearer {config["api_key"]}",
+                "Authorization": "Bearer " + config["api_key"],
                 "Content-Type": "application/json",
             },
             json={
@@ -733,7 +713,7 @@ def api_analyze_question():
         if "latex_content" not in parsed:
             parsed["latex_content"] = parsed.get("content", text_content)
 
-        if text_content and not image_base64:
+        if text_content and cache_key:
             _execute(db,
                 f"INSERT INTO api_cache (content_hash, subject_name, response_json) VALUES ({PH}, {PH}, {PH})",
                 (cache_key, subject_name, json.dumps(parsed, ensure_ascii=False)))

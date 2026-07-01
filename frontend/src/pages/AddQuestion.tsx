@@ -14,6 +14,7 @@ export default function AddQuestion() {
   const [source, setSource] = useState('');
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,23 +51,62 @@ export default function AddQuestion() {
     reader.readAsDataURL(file);
   };
 
+  // OCR: extract text from image using Tesseract.js
+  const ocrImage = async () => {
+    if (!imageBase64) return;
+    setOcrLoading(true);
+    setAiError('');
+    try {
+      const Tesseract = await import('tesseract.js');
+      const result = await Tesseract.recognize(imageBase64, 'chi_sim+eng', {
+        logger: (m: { status: string; progress: number }) => {
+          if (m.status === 'recognizing text') {
+            // Could show progress if needed
+          }
+        },
+      });
+      const text = result.data.text.trim();
+      if (text) {
+        // Try to split question and answer
+        // Common patterns: "答案：X" or "答：X" or "Answer: X"
+        const answerMatch = text.match(/(?:答案|答|Answer)[：:]\s*(.+?)(?:\n|$)/i);
+        if (answerMatch) {
+          const answerText = answerMatch[1].trim();
+          const questionText = text.substring(0, answerMatch.index).trim();
+          setContent(questionText);
+          setAnswer(answerText);
+        } else {
+          setContent(text);
+        }
+        setAiError('');
+      } else {
+        setAiError('未能识别出文字，请确认图片清晰度');
+      }
+    } catch (e) {
+      setAiError('OCR 识别失败：' + (e as Error).message);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  // AI: analyze knowledge points (text-only, for DeepSeek)
   const analyze = async () => {
-    if (!imageBase64 && !content.trim()) {
-      setAiError('请先上传图片或输入题目内容');
+    if (!content.trim()) {
+      setAiError('请先输入或识别题目内容');
       return;
     }
     setAiLoading(true);
     setAiError('');
     try {
       const subjName = subjects.find(s => String(s.id) === subjectId)?.name || '';
-      const body: Record<string, unknown> = { content, subject_name: subjName };
-      if (imageBase64) body.image = imageBase64;
-      const result = await api.analyzeQuestion(body) as AnalysisResult;
-      // Auto-fill content and answer
-      if (result.latex_content) setContent(result.latex_content);
-      else if (result.content) setContent(result.content);
-      if (result.answer) setAnswer(result.answer);
-      setAiError('');
+      const result = await api.analyzeQuestion({ content, subject_name: subjName }) as AnalysisResult;
+      // Update content if AI improved it
+      if (result.latex_content && result.latex_content !== content) {
+        setContent(result.latex_content);
+      }
+      if (result.answer && !answer) {
+        setAnswer(result.answer);
+      }
     } catch (e) { setAiError((e as Error).message); }
     finally { setAiLoading(false); }
   };
@@ -113,9 +153,16 @@ export default function AddQuestion() {
           <div className="col-md-6">
             <div className="d-flex justify-content-between align-items-center mb-1">
               <label className="form-label mb-0">上传题目图片（可选）</label>
-              <button type="button" className="btn btn-sm btn-primary" onClick={analyze} disabled={aiLoading || (!imageBase64 && !content.trim())}>
-                {aiLoading ? <><span className="spinner-border spinner-border-sm"></span> 分析中...</> : <><i className="bi bi-stars"></i> AI 分析题目</>}
-              </button>
+              {imageBase64 && (
+                <div className="d-flex gap-1">
+                  <button type="button" className="btn btn-sm btn-outline-primary" onClick={ocrImage} disabled={ocrLoading}>
+                    {ocrLoading ? <><span className="spinner-border spinner-border-sm"></span> 识别中...</> : <><i className="bi bi-upc-scan"></i> OCR 识别</>}
+                  </button>
+                  <button type="button" className="btn btn-sm btn-primary" onClick={analyze} disabled={aiLoading || !content.trim()}>
+                    {aiLoading ? <><span className="spinner-border spinner-border-sm"></span> 分析中...</> : <><i className="bi bi-stars"></i> AI 分析知识点</>}
+                  </button>
+                </div>
+              )}
             </div>
             {imageBase64 ? (
               <>
@@ -150,7 +197,7 @@ export default function AddQuestion() {
         <div className="mb-3">
           <label className="form-label">题目内容 <span className="text-danger">*</span></label>
           <textarea className="form-control" rows={6} required value={content} onChange={e => setContent(e.target.value)}
-            placeholder="粘贴题目内容（支持 LaTeX，如 $x^2$ 或 $$\\int_0^1 f(x)dx$$）" style={{ fontFamily: 'monospace' }} />
+            placeholder="粘贴或 OCR 识别题目内容（支持 LaTeX，如 $x^2$ 或 $$\\int_0^1 f(x)dx$$）" style={{ fontFamily: 'monospace' }} />
           <div className="form-text">支持 LaTeX 数学公式：行内 $...$，独立 $$...$$</div>
         </div>
 
