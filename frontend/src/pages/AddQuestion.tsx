@@ -14,14 +14,12 @@ export default function AddQuestion() {
   const [source, setSource] = useState('');
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState<AnalysisResult | null>(null);
   const [aiError, setAiError] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { api.subjects().then(d => setSubjects(d as Subject[])); }, []);
 
-  // Escape HTML to prevent XSS
   const escapeHtml = (str: string) =>
     str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -53,24 +51,29 @@ export default function AddQuestion() {
   };
 
   const analyze = async () => {
+    if (!imageBase64 && !content.trim()) {
+      setAiError('请先上传图片或输入题目内容');
+      return;
+    }
     setAiLoading(true);
     setAiError('');
-    setAiResult(null);
     try {
       const subjName = subjects.find(s => String(s.id) === subjectId)?.name || '';
       const body: Record<string, unknown> = { content, subject_name: subjName };
       if (imageBase64) body.image = imageBase64;
       const result = await api.analyzeQuestion(body) as AnalysisResult;
-      setAiResult(result);
+      // Auto-fill content and answer
       if (result.latex_content) setContent(result.latex_content);
+      else if (result.content) setContent(result.content);
       if (result.answer) setAnswer(result.answer);
+      setAiError('');
     } catch (e) { setAiError((e as Error).message); }
     finally { setAiLoading(false); }
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim()) { alert('题干不能为空'); return; }
+    if (!content.trim()) { alert('题目内容不能为空'); return; }
     const result = await api.addQuestion({ subject_id: Number(subjectId), content, answer, source }) as { id: number };
     navigate(`/questions/${result.id}/review`);
   };
@@ -108,7 +111,12 @@ export default function AddQuestion() {
 
         <div className="row g-3 mb-3">
           <div className="col-md-6">
-            <label className="form-label">上传题目图片（可选）</label>
+            <div className="d-flex justify-content-between align-items-center mb-1">
+              <label className="form-label mb-0">上传题目图片（可选）</label>
+              <button type="button" className="btn btn-sm btn-primary" onClick={analyze} disabled={aiLoading || (!imageBase64 && !content.trim())}>
+                {aiLoading ? <><span className="spinner-border spinner-border-sm"></span> 分析中...</> : <><i className="bi bi-stars"></i> AI 分析题目</>}
+              </button>
+            </div>
             {imageBase64 ? (
               <>
                 <div className="border rounded p-2 text-center">
@@ -130,6 +138,7 @@ export default function AddQuestion() {
             )}
             <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
               onChange={e => { if (e.target.files?.[0]) handleImage(e.target.files[0]); }} />
+            {aiError && <div className="alert alert-danger py-1 mt-2 mb-0"><small>{aiError}</small></div>}
           </div>
           <div className="col-md-6">
             <label className="form-label">LaTeX 预览</label>
@@ -142,44 +151,13 @@ export default function AddQuestion() {
           <label className="form-label">题目内容 <span className="text-danger">*</span></label>
           <textarea className="form-control" rows={6} required value={content} onChange={e => setContent(e.target.value)}
             placeholder="粘贴题目内容（支持 LaTeX，如 $x^2$ 或 $$\\int_0^1 f(x)dx$$）" style={{ fontFamily: 'monospace' }} />
-          <div className="form-text">支持 LaTeX 数学公式：行内 $...$ ，独立 $$...$$</div>
+          <div className="form-text">支持 LaTeX 数学公式：行内 $...$，独立 $$...$$</div>
         </div>
 
         <div className="mb-3">
           <label className="form-label">答案</label>
           <input type="text" className="form-control" value={answer} onChange={e => setAnswer(e.target.value)}
             placeholder="填写结果即可，如：C 或 42 或简要文字答案" />
-        </div>
-
-        {/* AI Panel */}
-        <div className="bg-light rounded p-3 mb-3">
-          <div className="d-flex justify-content-between align-items-center mb-2">
-            <h6 className="mb-0"><i className="bi bi-robot"></i> AI 辅助分析</h6>
-            <button type="button" className="btn btn-primary" onClick={analyze} disabled={aiLoading}>
-              {aiLoading ? <><span className="spinner-border spinner-border-sm"></span> 分析中...</> : <><i className="bi bi-stars"></i> AI 分析题目</>}
-            </button>
-          </div>
-          {aiError && <div className="alert alert-danger py-1 mt-2">{aiError}</div>}
-          {aiResult && (
-            <div className="mt-2">
-              <div className="row g-3">
-                <div className="col-md-6">
-                  <label className="form-label small">AI 识别的题目内容</label>
-                  <div className="bg-white p-2 rounded border" style={{ maxHeight: 150, overflowY: 'auto' }}>{aiResult.latex_content || aiResult.content}</div>
-                </div>
-                <div className="col-md-6">
-                  <label className="form-label small">AI 建议的知识点</label>
-                  <div className="bg-white p-2 rounded border" style={{ maxHeight: 150, overflowY: 'auto' }}>
-                    {(aiResult.knowledge_points || []).map((kp, i) => (
-                      <span key={i} className={`badge ${kp.role === 'primary' ? 'bg-primary' : 'bg-secondary'} me-1 mb-1`}>
-                        {kp.name} ({kp.weight})
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="d-flex gap-2">
