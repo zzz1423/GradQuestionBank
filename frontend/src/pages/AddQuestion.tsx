@@ -20,6 +20,7 @@ export default function AddQuestion() {
   const [aiLoading, setAiLoading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [aiProvider, setAiProvider] = useState('deepseek');
   const [previewHtml, setPreviewHtml] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -31,6 +32,7 @@ export default function AddQuestion() {
   const [manualWeight, setManualWeight] = useState('1.0');
 
   useEffect(() => { api.subjects().then(d => setSubjects(d as Subject[])); }, []);
+  useEffect(() => { api.getSettings().then(d => setAiProvider((d as Record<string, string>).ai_provider || 'deepseek')).catch(() => {}); }, []);
 
   // Load knowledge points when subject changes
   useEffect(() => {
@@ -105,6 +107,38 @@ export default function AddQuestion() {
     } finally {
       setOcrLoading(false);
     }
+  };
+
+
+  // AI: analyze image directly (for MiMo vision)
+  const analyzeImage = async () => {
+    if (!imageBase64) return;
+    setAiLoading(true);
+    setAiError('');
+    try {
+      const subjName = subjects.find(s => String(s.id) === subjectId)?.name || '';
+      const result = await api.analyzeQuestion({ content: '', subject_name: subjName, image: imageBase64 }) as AnalysisResult;
+      if (result.error) { setAiError(result.error); return; }
+      if (result.latex_content) setContent(result.latex_content);
+      else if (result.content) setContent(result.content);
+      if (result.answer) setAnswer(result.answer);
+      // Process knowledge points
+      const newKps: SelectedKP[] = (result.knowledge_points || []).map(kp => {
+        const existing = allKps.find(ak => ak.name === kp.name);
+        return {
+          id: existing?.id || Date.now() + Math.random(),
+          name: kp.name,
+          chapter: existing?.chapter_name || kp.chapter || '',
+          role: kp.role || 'primary',
+          weight: kp.weight || 1.0,
+        };
+      });
+      setSelectedKps(prev => {
+        const existingIds = new Set(prev.map(k => k.id));
+        return [...prev, ...newKps.filter(k => !existingIds.has(k.id))];
+      });
+    } catch (e) { setAiError((e as Error).message); }
+    finally { setAiLoading(false); }
   };
 
   // AI: analyze knowledge points
@@ -251,9 +285,16 @@ export default function AddQuestion() {
               <label className="form-label mb-0">上传题目图片（可选）</label>
                 <div className="d-flex gap-1">
                   {imageBase64 && (
-                    <button type="button" className="btn btn-sm btn-outline-primary" onClick={ocrImage} disabled={ocrLoading}>
-                      {ocrLoading ? <><span className="spinner-border spinner-border-sm"></span> 识别中...</> : <><i className="bi bi-upc-scan"></i> OCR 识别</>}
-                    </button>
+                    <>
+                      <button type="button" className="btn btn-sm btn-outline-primary" onClick={ocrImage} disabled={ocrLoading}>
+                        {ocrLoading ? <><span className="spinner-border spinner-border-sm"></span> 识别中...</> : <><i className="bi bi-upc-scan"></i> OCR 识别</>}
+                      </button>
+                      {aiProvider === 'mimo' && (
+                        <button type="button" className="btn btn-sm btn-outline-success" onClick={analyzeImage} disabled={aiLoading}>
+                          {aiLoading ? <><span className="spinner-border spinner-border-sm"></span> 分析中...</> : <><i className="bi bi-image"></i> AI 识图</>}
+                        </button>
+                      )}
+                    </>
                   )}
                   <button type="button" className="btn btn-sm btn-primary" onClick={analyze} disabled={aiLoading || !content.trim()}>
                     {aiLoading ? <><span className="spinner-border spinner-border-sm"></span> 分析中...</> : <><i className="bi bi-stars"></i> AI 分析知识点</>}

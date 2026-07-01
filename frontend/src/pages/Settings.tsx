@@ -11,6 +11,7 @@ interface Settings {
 
 const PROVIDERS = [
   { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', models: ['deepseek-chat', 'deepseek-reasoner'] },
+  { id: 'mimo', name: '小米 MiMo', url: 'https://api.xiaomimimo.com/v1/chat/completions', models: ['mimo-v2.5'] },
   { id: 'openai', name: 'OpenAI', url: 'https://api.openai.com/v1/chat/completions', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
   { id: 'custom', name: '自定义', url: '', models: [] },
 ];
@@ -124,6 +125,9 @@ export default function Settings() {
                   )}
                   {settings.ai_provider === 'openai' && (
                     <>前往 <a href="https://platform.openai.com/" target="_blank" rel="noreferrer">platform.openai.com</a> 获取 API Key</>
+                  )}
+                  {settings.ai_provider === 'mimo' && (
+                    <>前往 <a href="https://platform.xiaomimimo.com/#/console/api-keys" target="_blank" rel="noreferrer">platform.xiaomimimo.com</a> 获取 API Key</>
                   )}
                 </div>
               </div>

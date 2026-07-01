@@ -81,6 +81,21 @@ def _set_setting(key, value):
     g.db.commit()
 
 
+
+
+def _ai_headers(config):
+    """Build auth headers based on provider."""
+    if config["provider"] == "mimo":
+        return {
+            "api-key": config["api_key"],
+            "Content-Type": "application/json",
+        }
+    else:
+        return {
+            "Authorization": "Bearer " + config["api_key"],
+            "Content-Type": "application/json",
+        }
+
 def _get_ai_config():
     """Get AI configuration from database settings, with env var fallback."""
     provider = _get_setting("ai_provider", "deepseek")
@@ -98,6 +113,7 @@ def _get_ai_config():
         "api_key": api_key,
         "api_url": api_url,
         "model": _get_setting("ai_model", "deepseek-chat"),
+        "vision": provider in ("mimo", "openai"),
     }
 
 
@@ -667,8 +683,18 @@ def api_analyze_question():
 
     messages = [{"role": "system", "content": prompt}]
     if image_base64:
-        # Image provided but no text - reject
-        return jsonify({"error": "请先输入题目内容，或使用 OCR 识别图片中的文字"}), 400
+        # Image provided but no text - use vision if provider supports it
+        if config.get("vision"):
+            vision_content = []
+            vision_content.append({"type": "image_url", "image_url": {"url": image_base64}})
+            vision_content.append({"type": "text", "text": """请仔细分析这张图片中的题目，完成以下任务：
+1. 题目内容：完整提取，数学公式用LaTeX（行内$...$，独立$$...$$）
+2. 答案：只填最终结果
+
+严格按JSON格式返回：{"content": "题目内容", "answer": "答案", "knowledge_points": [{"name": "知识点", "role": "primary", "weight": 1.0}], "tags": ["标签"]}"""})
+            messages.append({"role": "user", "content": vision_content})
+        else:
+            return jsonify({"error": "请先输入题目内容，或使用 OCR 识别图片中的文字"}), 400
     else:
         messages.append({"role": "user", "content": text_content})
     else:
@@ -685,10 +711,7 @@ def api_analyze_question():
     try:
         resp = http_requests.post(
             config["api_url"],
-            headers={
-                "Authorization": "Bearer " + config["api_key"],
-                "Content-Type": "application/json",
-            },
+            headers=_ai_headers(config),
             json={
                 "model": config["model"],
                 "messages": messages,
@@ -774,10 +797,7 @@ def api_analyze():
     try:
         resp = http_requests.post(
             config["api_url"],
-            headers={
-                "Authorization": "Bearer " + config["api_key"],
-                "Content-Type": "application/json",
-            },
+            headers=_ai_headers(config),
             json={
                 "model": config["model"],
                 "messages": [{"role": "user", "content": prompt}],
@@ -1115,10 +1135,7 @@ def api_settings_test():
     try:
         resp = http_requests.post(
             config["api_url"],
-            headers={
-                "Authorization": "Bearer " + config["api_key"],
-                "Content-Type": "application/json",
-            },
+            headers=_ai_headers(config),
             json={
                 "model": config["model"],
                 "messages": [{"role": "user", "content": "Hello, respond with 'ok' only."}],
