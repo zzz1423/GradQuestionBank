@@ -23,8 +23,10 @@ export default function Subjects() {
 
   const deleteSubject = async (id: number, subjectName: string) => {
     if (!confirm(`确定删除「${subjectName}」及其所有章节、知识点和题目？`)) return;
-    await api.deleteSubject(id);
-    load();
+    try {
+      await api.deleteSubject(id);
+      load();
+    } catch (e) { alert((e as Error).message); }
   };
 
   return (

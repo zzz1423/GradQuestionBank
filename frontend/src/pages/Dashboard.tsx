@@ -1,13 +1,14 @@
 ﻿import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { MASTERY_LABELS, MASTERY_COLORS, type DashboardData, type Question } from '../types';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
 
   useEffect(() => {
-    api.dashboard().then(d => setData(d as unknown as DashboardData));
+    api.dashboard().then(d => setData(d as unknown as DashboardData)).catch(() => {});
   }, []);
 
   if (!data) return <div className="text-center py-5"><div className="spinner-border"></div></div>;
@@ -68,7 +69,7 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {recent_questions.map((q: Question) => (
-                    <tr key={q.id} style={{ cursor: 'pointer' }} onClick={() => window.location.href = `/questions/${q.id}`}>
+                    <tr key={q.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/questions/${q.id}`)}>
                       <td><span className="badge bg-primary">{q.subject_name}</span></td>
                       <td>{q.content.length > 80 ? q.content.slice(0, 80) + '...' : q.content}</td>
                       <td>

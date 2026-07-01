@@ -21,6 +21,10 @@ export default function AddQuestion() {
 
   useEffect(() => { api.subjects().then(d => setSubjects(d as Subject[])); }, []);
 
+  // Escape HTML to prevent XSS
+  const escapeHtml = (str: string) =>
+    str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
   // LaTeX preview
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -29,15 +33,15 @@ export default function AddQuestion() {
         let html = content
           .replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => {
             try { return katex.renderToString(m, { displayMode: true, throwOnError: false }); }
-            catch { return `<span class="text-danger">${m}</span>`; }
+            catch { return `<span class="text-danger">${escapeHtml(m)}</span>`; }
           })
           .replace(/\$([^$]+?)\$/g, (_, m) => {
             try { return katex.renderToString(m, { displayMode: false, throwOnError: false }); }
-            catch { return `<span class="text-danger">${m}</span>`; }
+            catch { return `<span class="text-danger">${escapeHtml(m)}</span>`; }
           })
           .replace(/\n/g, '<br>');
         setPreviewHtml(html);
-      } catch { setPreviewHtml(content); }
+      } catch { setPreviewHtml(escapeHtml(content)); }
     }, 500);
     return () => clearTimeout(timer);
   }, [content]);

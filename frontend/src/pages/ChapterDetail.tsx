@@ -23,17 +23,21 @@ export default function ChapterDetail() {
 
   const addKP = async () => {
     if (!kpName.trim()) return;
-    await api.addKP(chapterId, kpName.trim(), kpDesc.trim() || undefined);
-    setKpName('');
-    setKpDesc('');
-    setShowModal(false);
-    load();
+    try {
+      await api.addKP(chapterId, kpName.trim(), kpDesc.trim() || undefined);
+      setKpName('');
+      setKpDesc('');
+      setShowModal(false);
+      load();
+    } catch (e) { alert((e as Error).message); }
   };
 
   const deleteKP = async (kpId: number) => {
     if (!confirm('确定删除此知识点？')) return;
-    await api.deleteKP(kpId);
-    load();
+    try {
+      await api.deleteKP(kpId);
+      load();
+    } catch (e) { alert((e as Error).message); }
   };
 
   if (!chapter) return <div className="text-center py-5"><div className="spinner-border"></div></div>;

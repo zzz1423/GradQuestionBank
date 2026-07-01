@@ -23,7 +23,7 @@ from database import (
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Path to built React frontend
 DIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "dist")
@@ -997,7 +997,7 @@ def api_import():
                 kp_id = kp["id"]
 
             role = kp_data.get("role", "primary")
-            weight = max(0.1, min(1.0, float(kp_data.get("weight", 1.0))))
+            weight = _safe_weight(kp_data.get("weight", 1.0))
             _execute(db,
                 _insert_or_ignore_sql("question_knowledge_points",
                                       ["question_id", "knowledge_point_id", "role", "weight"]),

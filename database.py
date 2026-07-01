@@ -122,8 +122,9 @@ def _migrate(conn):
                 if column not in cols:
                     conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
                     conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            import sys
+            print(f"Migration warning: {table}.{column} - {e}", file=sys.stderr)
 
 
 def init_db():

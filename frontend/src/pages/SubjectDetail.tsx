@@ -22,16 +22,20 @@ export default function SubjectDetail() {
 
   const addChapter = async () => {
     if (!name.trim()) return;
-    await api.addChapter(subjectId, name.trim());
-    setName('');
-    setShowModal(false);
-    load();
+    try {
+      await api.addChapter(subjectId, name.trim());
+      setName('');
+      setShowModal(false);
+      load();
+    } catch (e) { alert((e as Error).message); }
   };
 
   const deleteChapter = async (chId: number) => {
     if (!confirm('确定删除此章节？')) return;
-    await api.deleteChapter(chId);
-    load();
+    try {
+      await api.deleteChapter(chId);
+      load();
+    } catch (e) { alert((e as Error).message); }
   };
 
   if (!subject) return <div className="text-center py-5"><div className="spinner-border"></div></div>;

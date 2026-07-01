@@ -1,12 +1,20 @@
 const BASE = '';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + url, init);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout
+  try {
+    const res = await fetch(BASE + url, { ...init, signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  } catch (e) {
+    clearTimeout(timeout);
+    throw e;
   }
-  return res.json();
 }
 
 function qs(params: Record<string, string | number | undefined | null>): string {
