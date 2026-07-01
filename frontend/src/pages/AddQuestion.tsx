@@ -1,9 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import type { Subject, AnalysisResult } from '../types';
+import type { Subject, KnowledgePoint, AnalysisResult } from '../types';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+
+interface SelectedKP {
+  id: number; name: string; chapter: string; role: string; weight: number;
+}
 
 export default function AddQuestion() {
   const navigate = useNavigate();
@@ -19,7 +23,32 @@ export default function AddQuestion() {
   const [previewHtml, setPreviewHtml] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Knowledge point state
+  const [allKps, setAllKps] = useState<KnowledgePoint[]>([]);
+  const [selectedKps, setSelectedKps] = useState<SelectedKP[]>([]);
+  const [manualKpId, setManualKpId] = useState('');
+  const [manualRole, setManualRole] = useState('primary');
+  const [manualWeight, setManualWeight] = useState('1.0');
+
   useEffect(() => { api.subjects().then(d => setSubjects(d as Subject[])); }, []);
+
+  // Load knowledge points when subject changes
+  useEffect(() => {
+    if (!subjectId) { setAllKps([]); return; }
+    // We'll load KPs from the review endpoint after question is created,
+    // but for now we can preload from subject detail
+    api.subjectDetail(Number(subjectId)).then(d => {
+      const data = d as { chapters: { id: number; name: string }[] };
+      // Load KPs for each chapter
+      const all: KnowledgePoint[] = [];
+      Promise.all(data.chapters.map(ch =>
+        api.chapterDetail(ch.id).then(dd => {
+          const kps = (dd as { knowledge_points: KnowledgePoint[] }).knowledge_points;
+          kps.forEach(kp => { kp.chapter_name = ch.name; all.push(kp); });
+        })
+      )).then(() => setAllKps(all)).catch(() => {});
+    }).catch(() => {});
+  }, [subjectId]);
 
   const escapeHtml = (str: string) =>
     str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -51,34 +80,23 @@ export default function AddQuestion() {
     reader.readAsDataURL(file);
   };
 
-  // OCR: extract text from image using Tesseract.js
+  // OCR
   const ocrImage = async () => {
     if (!imageBase64) return;
     setOcrLoading(true);
     setAiError('');
     try {
       const Tesseract = await import('tesseract.js');
-      const result = await Tesseract.recognize(imageBase64, 'chi_sim+eng', {
-        logger: (m: { status: string; progress: number }) => {
-          if (m.status === 'recognizing text') {
-            // Could show progress if needed
-          }
-        },
-      });
+      const result = await Tesseract.recognize(imageBase64, 'chi_sim+eng');
       const text = result.data.text.trim();
       if (text) {
-        // Try to split question and answer
-        // Common patterns: "答案：X" or "答：X" or "Answer: X"
         const answerMatch = text.match(/(?:答案|答|Answer)[：:]\s*(.+?)(?:\n|$)/i);
         if (answerMatch) {
-          const answerText = answerMatch[1].trim();
-          const questionText = text.substring(0, answerMatch.index).trim();
-          setContent(questionText);
-          setAnswer(answerText);
+          setContent(text.substring(0, answerMatch.index).trim());
+          setAnswer(answerMatch[1].trim());
         } else {
           setContent(text);
         }
-        setAiError('');
       } else {
         setAiError('未能识别出文字，请确认图片清晰度');
       }
@@ -89,33 +107,72 @@ export default function AddQuestion() {
     }
   };
 
-  // AI: analyze knowledge points (text-only, for DeepSeek)
+  // AI: analyze knowledge points
   const analyze = async () => {
-    if (!content.trim()) {
-      setAiError('请先输入或识别题目内容');
-      return;
-    }
+    if (!content.trim()) { setAiError('请先输入或识别题目内容'); return; }
     setAiLoading(true);
     setAiError('');
     try {
       const subjName = subjects.find(s => String(s.id) === subjectId)?.name || '';
       const result = await api.analyzeQuestion({ content, subject_name: subjName }) as AnalysisResult;
-      // Update content if AI improved it
-      if (result.latex_content && result.latex_content !== content) {
-        setContent(result.latex_content);
-      }
-      if (result.answer && !answer) {
-        setAnswer(result.answer);
-      }
+      if (result.latex_content) setContent(result.latex_content);
+      if (result.answer && !answer) setAnswer(result.answer);
+      // Convert AI result to selected KPs
+      const newKps: SelectedKP[] = (result.knowledge_points || []).map(kp => {
+        const existing = allKps.find(ak => ak.name === kp.name);
+        return {
+          id: existing?.id || Date.now() + Math.random(),
+          name: kp.name,
+          chapter: existing?.chapter_name || kp.chapter || '',
+          role: kp.role || 'primary',
+          weight: kp.weight || 1.0,
+        };
+      });
+      setSelectedKps(prev => {
+        const existingIds = new Set(prev.map(k => k.id));
+        return [...prev, ...newKps.filter(k => !existingIds.has(k.id))];
+      });
     } catch (e) { setAiError((e as Error).message); }
     finally { setAiLoading(false); }
   };
 
+  const addManualKp = () => {
+    if (!manualKpId) return;
+    const opt = allKps.find(k => k.id === Number(manualKpId));
+    if (!opt || selectedKps.some(k => k.id === opt.id)) return;
+    setSelectedKps([...selectedKps, {
+      id: opt.id, name: opt.name, chapter: opt.chapter_name || '',
+      role: manualRole, weight: parseFloat(manualWeight)
+    }]);
+    setManualKpId('');
+  };
+
+  const removeKp = (idx: number) => setSelectedKps(selectedKps.filter((_, i) => i !== idx));
+  const updateRole = (idx: number, role: string) => {
+    const next = [...selectedKps];
+    next[idx] = { ...next[idx], role, weight: role === 'primary' ? Math.max(0.5, next[idx].weight) : Math.min(0.5, next[idx].weight) };
+    setSelectedKps(next);
+  };
+  const updateWeight = (idx: number, weight: number) => {
+    const next = [...selectedKps];
+    next[idx] = { ...next[idx], weight };
+    setSelectedKps(next);
+  };
+
+  // Save question + knowledge points together
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) { alert('题目内容不能为空'); return; }
-    const result = await api.addQuestion({ subject_id: Number(subjectId), content, answer, source }) as { id: number };
-    navigate(`/questions/${result.id}/review`);
+    try {
+      const result = await api.addQuestion({ subject_id: Number(subjectId), content, answer, source }) as { id: number };
+      // Save knowledge points if any
+      if (selectedKps.length > 0) {
+        await api.saveReview(result.id, selectedKps);
+      }
+      navigate('/questions');
+    } catch (e) {
+      alert('保存失败：' + (e as Error).message);
+    }
   };
 
   return (
@@ -207,9 +264,87 @@ export default function AddQuestion() {
             placeholder="填写结果即可，如：C 或 42 或简要文字答案" />
         </div>
 
+        {/* Knowledge Points Panel */}
+        <div className="card mb-3">
+          <div className="card-header d-flex justify-content-between align-items-center">
+            <span><i className="bi bi-diagram-3"></i> 关联知识点</span>
+            <button type="button" className="btn btn-sm btn-primary" onClick={analyze}
+              disabled={aiLoading || !content.trim()}>
+              {aiLoading ? <><span className="spinner-border spinner-border-sm"></span> 分析中...</> : <><i className="bi bi-stars"></i> AI 分析知识点</>}
+            </button>
+          </div>
+          <div className="card-body">
+            {/* Selected KPs */}
+            {selectedKps.length > 0 ? (
+              <div className="mb-3">
+                {selectedKps.map((kp, idx) => (
+                  <div key={idx} className="card mb-2">
+                    <div className="card-body p-2">
+                      <div className="d-flex justify-content-between align-items-center mb-1">
+                        <div>
+                          <span className={`badge ${kp.role === 'primary' ? 'bg-primary' : 'bg-secondary'} me-1`}>
+                            {kp.role === 'primary' ? '主要' : '次要'}
+                          </span>
+                          <strong>{kp.name}</strong>
+                          <small className="text-muted ms-1">{kp.chapter}</small>
+                        </div>
+                        <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => removeKp(idx)}>&times;</button>
+                      </div>
+                      <div className="row g-2">
+                        <div className="col-6">
+                          <select className="form-select form-select-sm" value={kp.role} onChange={e => updateRole(idx, e.target.value)}>
+                            <option value="primary">主要知识点</option>
+                            <option value="secondary">次要知识点</option>
+                          </select>
+                        </div>
+                        <div className="col-6">
+                          <div className="input-group input-group-sm">
+                            <input type="range" className="form-range" min={0.1} max={1} step={0.1} value={kp.weight}
+                              onChange={e => updateWeight(idx, parseFloat(e.target.value))} style={{ width: '60%' }} />
+                            <span className="input-group-text">{kp.weight}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-muted mb-3">点击上方按钮，AI 将自动分析题目涉及的知识点</div>
+            )}
+
+            {/* Manual add */}
+            <div className="border-top pt-3">
+              <div className="row g-2 align-items-end">
+                <div className="col-md-5">
+                  <select className="form-select form-select-sm" value={manualKpId} onChange={e => setManualKpId(e.target.value)}>
+                    <option value="">手动添加知识点...</option>
+                    {allKps.map(kp => <option key={kp.id} value={kp.id}>{kp.chapter_name} &gt; {kp.name}</option>)}
+                  </select>
+                </div>
+                <div className="col-md-3">
+                  <select className="form-select form-select-sm" value={manualRole} onChange={e => setManualRole(e.target.value)}>
+                    <option value="primary">主要</option>
+                    <option value="secondary">次要</option>
+                  </select>
+                </div>
+                <div className="col-md-2">
+                  <input type="number" className="form-control form-control-sm" value={manualWeight}
+                    onChange={e => setManualWeight(e.target.value)} min={0.1} max={1} step={0.1} />
+                </div>
+                <div className="col-md-2">
+                  <button type="button" className="btn btn-sm btn-outline-primary w-100" onClick={addManualKp}>添加</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="d-flex gap-2">
-          <button type="submit" className="btn btn-primary"><i className="bi bi-check-circle"></i> 保存题目</button>
-          <Link to="/questions" className="btn btn-outline-secondary">取消</Link>
+          <button type="submit" className="btn btn-primary btn-lg">
+            <i className="bi bi-check-circle"></i> 保存题目
+          </button>
+          <Link to="/questions" className="btn btn-outline-secondary btn-lg">取消</Link>
         </div>
       </form>
     </>
