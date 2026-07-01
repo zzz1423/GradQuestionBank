@@ -6,6 +6,7 @@ interface Settings {
   api_key: string;
   api_url: string;
   ai_model: string;
+  has_api_key: boolean;
 }
 
 const PROVIDERS = [
@@ -16,7 +17,7 @@ const PROVIDERS = [
 
 export default function Settings() {
   const [settings, setSettings] = useState<Settings>({
-    ai_provider: 'deepseek', api_key: '', api_url: '', ai_model: 'deepseek-chat',
+    ai_provider: 'deepseek', api_key: '', api_url: '', ai_model: 'deepseek-chat', has_api_key: false,
   });
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -28,10 +29,6 @@ export default function Settings() {
     api.getSettings().then(d => {
       const s = d as unknown as Settings;
       setSettings(s);
-      // If api_key is masked, clear it so user doesn't accidentally save masked value
-      if (s.api_key && s.api_key.includes('****')) {
-        setSettings({ ...s, api_key: '' });
-      }
     });
   }, []);
 
@@ -59,10 +56,7 @@ export default function Settings() {
         api_url: settings.api_url,
         ai_model: settings.ai_model,
       };
-      // Only send api_key if user entered a new one
-      if (settings.api_key) {
-        payload.api_key = settings.api_key;
-      }
+      if (settings.api_key) payload.api_key = settings.api_key;
       await api.saveSettings(payload);
       setToast('设置已保存');
       setTimeout(() => setToast(''), 3000);
@@ -117,7 +111,7 @@ export default function Settings() {
                 <div className="input-group">
                   <input type={showKey ? 'text' : 'password'}
                     className="form-control"
-                    placeholder={settings.api_key ? '已配置（留空保持不变）' : '输入 API Key...'}
+                    placeholder={settings.has_api_key ? '已配置（留空保持不变）' : '输入 API Key...'}
                     value={settings.api_key}
                     onChange={e => setSettings({ ...settings, api_key: e.target.value })} />
                   <button className="btn btn-outline-secondary" onClick={() => setShowKey(!showKey)}>
@@ -196,7 +190,7 @@ export default function Settings() {
                 <tbody>
                   <tr><td className="text-muted">服务商</td><td><span className="badge bg-primary">{provider.name}</span></td></tr>
                   <tr><td className="text-muted">模型</td><td><code>{settings.ai_model || '-'}</code></td></tr>
-                  <tr><td className="text-muted">API Key</td><td>{settings.api_key ? <span className="badge bg-success">已配置</span> : <span className="badge bg-warning text-dark">未配置</span>}</td></tr>
+                  <tr><td className="text-muted">API Key</td><td>{settings.has_api_key ? <span className="badge bg-success">已配置</span> : <span className="badge bg-warning text-dark">未配置</span>}</td></tr>
                 </tbody>
               </table>
             </div>

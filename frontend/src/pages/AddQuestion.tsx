@@ -159,6 +159,44 @@ export default function AddQuestion() {
     setSelectedKps(next);
   };
 
+
+  // Clean LaTeX formatting
+  const cleanLatex = () => {
+    let text = content;
+    // Strip HTML tags
+    text = text.replace(/<[^>]+>/g, '');
+    // Remove document structure
+    text = text.replace(/\\documentclass[^\n]*\n/g, '');
+    text = text.replace(/\\usepackage[^\n]*\n/g, '');
+    text = text.replace(/\\geometry[^\n]*\n/g, '');
+    text = text.replace(/\\begin\{document\}/g, '');
+    text = text.replace(/\\end\{document\}/g, '');
+    // Remove formatting
+    text = text.replace(/\\noindent\*?/g, '');
+    text = text.replace(/\\textbf\{([^}]*)\}/g, '**$1**');
+    text = text.replace(/\\textit\{([^}]*)\}/g, '*$1*');
+    text = text.replace(/\\emph\{([^}]*)\}/g, '*$1*');
+    text = text.replace(/\\(bigskip|medskip|smallskip)\*?/g, '');
+    text = text.replace(/\\section\*?\{[^}]*\}/g, '');
+    text = text.replace(/\\subsection\*?\{[^}]*\}/g, '');
+    // Fix AI typos
+    text = text.replace(/\\\$\$6pt\]/g, '\\\\[6pt]');
+    text = text.replace(/\\\$\$4pt\]/g, '\\\\[4pt]');
+    text = text.replace(/\\\$\$8pt\]/g, '\\\\[8pt]');
+    // Convert \[...\] to $$...$$
+    text = text.replace(/\\\[([^\]]+)\\\]/g, '$$$$$1$$$$');
+    // Convert align* to aligned
+    text = text.replace(/\\begin\{align\*\}([\\s\\S]*?)\\end\{align\*\}/g, (_, p1) => {
+      return '$$\\begin{aligned}' + p1 + '\\end{aligned}$$';
+    });
+    // Clean whitespace
+    text = text.replace(/\\qquad/g, '  ');
+    text = text.replace(/\\quad/g, ' ');
+    text = text.replace(/\n{3,}/g, '\n\n');
+    text = text.split('\n').map((l: string) => l.trim()).join('\n').trim();
+    setContent(text);
+  };
+
   // Save question + knowledge points together
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,7 +290,12 @@ export default function AddQuestion() {
         </div>
 
         <div className="mb-3">
-          <label className="form-label">题目内容 <span className="text-danger">*</span></label>
+          <div className="d-flex justify-content-between align-items-center mb-1">
+              <label className="form-label mb-0">题目内容 <span className="text-danger">*</span></label>
+              <button type="button" className="btn btn-sm btn-outline-info" onClick={cleanLatex}>
+                <i className="bi bi-magic"></i> 清理 LaTeX
+              </button>
+            </div>
           <textarea className="form-control" rows={6} required value={content} onChange={e => setContent(e.target.value)}
             placeholder="粘贴或 OCR 识别题目内容（支持 LaTeX，如 $x^2$ 或 $$\\int_0^1 f(x)dx$$）" style={{ fontFamily: 'monospace' }} />
           <div className="form-text">支持 LaTeX 数学公式：行内 $...$，独立 $$...$$</div>

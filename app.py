@@ -1066,11 +1066,12 @@ def api_settings_get():
     """Get all settings (masks API key for security)."""
     db = g.db
     settings = {}
+    has_api_key = False
     try:
         rows = _fetchall(_execute(db, "SELECT key, value FROM settings"))
         for row in rows:
-            if row["key"] == "api_key" and row["value"]:
-                settings[row["key"]] = row["value"][:8] + "****" if len(row["value"]) > 8 else "****"
+            if row["key"] == "api_key":
+                has_api_key = bool(row["value"])
             else:
                 settings[row["key"]] = row["value"]
     except Exception:
@@ -1081,6 +1082,7 @@ def api_settings_get():
     settings.setdefault("api_url", DEEPSEEK_API_URL)
     settings.setdefault("ai_model", "deepseek-chat")
 
+    settings["has_api_key"] = has_api_key
     return jsonify(settings)
 
 
