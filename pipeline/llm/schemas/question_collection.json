@@ -61,7 +61,8 @@
                   "chapter",
                   "role",
                   "weight"
-                ]
+                ],
+                "additionalProperties": false
               }
             },
             "source_page": {
@@ -77,12 +78,14 @@
             "question_type",
             "subject_name",
             "knowledge_points"
-          ]
+          ],
+          "additionalProperties": false
         }
       }
     },
     "required": [
       "questions"
-    ]
+    ],
+    "additionalProperties": false
   }
 }

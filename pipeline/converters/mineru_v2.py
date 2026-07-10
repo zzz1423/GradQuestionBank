@@ -87,7 +87,7 @@ def convert(
             # Build the block
             block_seq += 1
             block_id = make_block_id(document_id, block_seq)
-            source = make_source(str(item_idx), page_idx)
+            source = make_source(str(item_idx), page_number)
 
             bbox = BBox.from_list(raw_bbox) if len(raw_bbox) >= 4 else BBox(0, 0, 0, 0)
 

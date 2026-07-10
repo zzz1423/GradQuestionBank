@@ -257,7 +257,7 @@ def _split_page(
         entry = {
             "question_number": sq.question_number,
             "content": sq.content,
-            "page": sq.page or page_num,
+            "page": page_num,
         }
 
         if sq.is_noise:
@@ -331,9 +331,10 @@ def _fallback_to_rule_engine(
                 text_parts.append(t)
 
         if text_parts:
+            raw_text = " ".join(text_parts)
             questions.append({
                 "question_number": ann.metadata.get("detected_number"),
-                "content": " ".join(text_parts),
+                "content": normalize_latex_in_text(raw_text),
                 "page": cand_page,
             })
 

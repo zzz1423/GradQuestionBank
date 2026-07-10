@@ -156,6 +156,7 @@ def _get_existing_hierarchy(
         db.close()
         return "\n".join(lines)
     except Exception:
+        logger.debug("Failed to read existing hierarchy from %s", db_path, exc_info=True)
         return ""
 # ============================================================
 # Convert QuestionCollection to import-ready JSON

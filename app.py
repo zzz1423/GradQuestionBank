@@ -1117,12 +1117,12 @@ def api_import():
 
         qid = _insert_returning_id(db,
             f"INSERT INTO questions (subject_id, content, answer, source, mastery_level, created_at) VALUES ({PH}, {PH}, {PH}, {PH}, {PH}, {PH})",
-            (subject_id, q_data["content"], q_data.get("answer"),
+            (subject_id, q_data.get("content", ""), q_data.get("answer"),
              q_data.get("source"), q_data.get("mastery_level", 0),
              q_data.get("created_at", datetime.now().isoformat())))
 
         for kp_data in q_data.get("knowledge_points", []):
-            kp_name = kp_data["name"]
+            kp_name = kp_data.get("name", "")
             kp_name = normalize_kp_name(kp_name)
             chapter_name = kp_data.get("chapter", "")
             if chapter_name:

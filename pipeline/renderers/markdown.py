@@ -42,16 +42,7 @@ def _render_block(block: Block, images: list[ImageAsset]) -> str | None:
     elif t == BlockType.list_item:
         return f"- {_render_inline_list(block.inline_content or [])}"
 
-    elif t == BlockType.formula_block:
-        latex = block.latex or ""
-        parts = [f"$$\n{latex}\n$$"]
-        if block.image_ref:
-            img = _find_image(block.image_ref, images)
-            if img:
-                parts.append(f"![formula]({img.path})")
-        return "\n".join(parts)
-
-    elif t == BlockType.equation_interline:
+    elif t in (BlockType.formula_block, BlockType.equation_interline):
         latex = block.latex or ""
         parts = [f"$$\n{latex}\n$$"]
         if block.image_ref:

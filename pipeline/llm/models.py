@@ -103,6 +103,7 @@ class Question(BaseModel):
     knowledge_points: list[KnowledgePoint] = Field(
         ...,
         min_length=1,
+        max_length=3,
         description="List of knowledge points (1-3 per question). "
                     "At least one primary knowledge point is required.",
     )

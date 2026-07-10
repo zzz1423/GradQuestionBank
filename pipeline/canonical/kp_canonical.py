@@ -13,6 +13,7 @@ Design:
 from __future__ import annotations
 
 import json
+import threading
 import logging
 from pathlib import Path
 from typing import Any
@@ -106,8 +107,9 @@ def add_alias(alias: str, canonical: str) -> None:
     if not alias or not canonical:
         return
 
-    old = _alias_map.get(alias)
-    _alias_map[alias] = canonical
+    with _alias_lock:
+        old = _alias_map.get(alias)
+        _alias_map[alias] = canonical
 
     # Persist to file
     try:

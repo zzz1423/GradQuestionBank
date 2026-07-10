@@ -175,6 +175,15 @@ def repair_all_questions(
 
     repaired_files: list[Path] = []
 
+    # Pre-load all question texts for neighbor context (avoids re-reading)
+    _question_text_cache: dict[Path, str] = {}
+    for qf in question_files:
+        try:
+            qd = json.loads(qf.read_text(encoding="utf-8"))
+            _question_text_cache[qf] = qd.get("stem_text", "")
+        except Exception:
+            _question_text_cache[qf] = ""
+
     for i, qpath in enumerate(question_files, 1):
         repaired_path = qpath.with_suffix(".repaired.json")
 
@@ -187,13 +196,11 @@ def repair_all_questions(
         stem_text = question_data.get("stem_text", "")
         block_metadata = question_data.get("block_metadata", {})
 
-        # Get neighboring questions for context
+        # Get neighboring questions for context (from cache)
         context_parts = []
-        for other_q in question_files:
+        for other_q, other_text in _question_text_cache.items():
             if other_q == qpath:
                 continue
-            other_data = json.loads(other_q.read_text(encoding="utf-8"))
-            other_text = other_data.get("stem_text", "")
             if other_text:
                 context_parts.append(other_text[:200])
         neighbors_text = "\n".join(context_parts[:3])

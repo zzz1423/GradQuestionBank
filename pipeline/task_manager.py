@@ -265,5 +265,5 @@ def run_pipeline_background(
         task_manager.update_task(
             task_id,
             status="failed",
-            error_message=str(e)[:500],
+            error_message=traceback.format_exc()[:500],
         )

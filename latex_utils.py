@@ -2,6 +2,63 @@
 
 import re
 
+def _match_braces(text, start):
+    """Find the end position of a brace group starting at 'start'.
+    Returns the index AFTER the closing brace, or -1 if not found."""
+    if start >= len(text) or text[start] != '{':
+        return -1
+    depth = 0
+    i = start
+    while i < len(text):
+        if text[i] == '{':
+            depth += 1
+        elif text[i] == '}':
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return -1
+
+
+def _remove_brace_command(text, cmd_pattern):
+    """Remove a LaTeX command and its brace-delimited argument, handling nested braces."""
+    result = []
+    i = 0
+    while i < len(text):
+        m = re.match(cmd_pattern, text[i:])
+        if m:
+            brace_start = i + m.end()
+            brace_end = _match_braces(text, brace_start)
+            if brace_end != -1:
+                result.append(text[i:i])  # empty string before command
+                i = brace_end
+                continue
+        result.append(text[i])
+        i += 1
+    return ''.join(result)
+
+
+def _replace_brace_command(text, cmd_pattern, replacement_func):
+    """Replace a LaTeX command and its brace-delimited argument, handling nested braces."""
+    result = []
+    i = 0
+    while i < len(text):
+        m = re.match(cmd_pattern, text[i:])
+        if m:
+            brace_start = i + m.end()
+            brace_end = _match_braces(text, brace_start)
+            if brace_end != -1:
+                inner = text[brace_start+1:brace_end-1]
+                result.append(replacement_func(inner))
+                i = brace_end
+                continue
+        result.append(text[i])
+        i += 1
+    return ''.join(result)
+
+
+
+
 
 def clean_latex(text):
     """Strip LaTeX document structure, keep renderable content for KaTeX."""
@@ -20,9 +77,9 @@ def clean_latex(text):
     text = text.replace('\\begin{document}', '')
     text = text.replace('\\end{document}', '')
 
-    # Remove section/subsection (unnumbered and numbered)
-    text = re.sub(r'\\section\*?\{[^}]*\}', '', text)
-    text = re.sub(r'\\subsection\*?\{[^}]*\}', '', text)
+    # Remove section/subsection (unnumbered and numbered, handles nested braces)
+    text = _remove_brace_command(text, r'\\section\*?\s*(?=\{)')
+    text = _remove_brace_command(text, r'\\subsection\*?\s*(?=\{)')
 
     # Remove document-level formatting commands
     text = re.sub(r'\\noindent\*?', '', text)

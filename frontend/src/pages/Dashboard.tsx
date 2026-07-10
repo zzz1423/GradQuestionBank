@@ -6,11 +6,13 @@ import { MASTERY_LABELS, MASTERY_COLORS, type DashboardData, type Question } fro
 export default function Dashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.dashboard().then(d => setData(d as unknown as DashboardData)).catch(() => {});
+    api.dashboard().then(d => setData(d as unknown as DashboardData)).catch(() => setError('加载数据失败'));
   }, []);
 
+  if (error) return <div className="text-center py-5"><div className="text-danger">{error}</div></div>;
   if (!data) return <div className="text-center py-5"><div className="spinner-border"></div></div>;
 
   const { stats, recent_questions } = data;

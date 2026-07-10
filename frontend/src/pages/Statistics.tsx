@@ -57,6 +57,14 @@ export default function Statistics() {
     });
   }, [subjectStats]);
 
+  // Cleanup charts on unmount
+  useEffect(() => {
+    return () => {
+      pieChart.current?.destroy();
+      barChart.current?.destroy();
+    };
+  }, []);
+
   return (
     <>
       <h4 className="mb-4">统计分析</h4>

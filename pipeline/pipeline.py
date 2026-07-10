@@ -127,7 +127,7 @@ class Pipeline:
         try:
             self.progress_callback(**kwargs)
         except Exception:
-            pass
+            logger.debug("Progress callback error", exc_info=True)
 
     def run(self) -> dict[str, Any]:
         """Run the full pipeline from start to finish (with checkpoint/resume)."""
@@ -142,7 +142,9 @@ class Pipeline:
         Returns:
             Summary dict with results
         """
-        start_idx = STEPS.index(start_step) if start_step in STEPS else 0
+        if start_step not in STEPS:
+            raise ValueError(f"Invalid start_step '{start_step}'. Valid steps: {STEPS}")
+        start_idx = STEPS.index(start_step)
         steps_to_run = STEPS[start_idx:]
 
         logger.info(f"Pipeline starting from step '{start_step}' for {self.pdf_path.name}")
@@ -229,7 +231,7 @@ class Pipeline:
 
         # Retry with --table False if output is mostly empty tables
         if v2_file.exists() and not self._mineru_output_has_content(v2_file):
-            logger.warning("MinerU output has no usable text, retrying with --table False")
+            logger.warning("MinerU output has no usable text, retrying with -m ocr")
             import shutil
             shutil.rmtree(mineru_output, ignore_errors=True)
 

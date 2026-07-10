@@ -39,12 +39,14 @@
           "required": [
             "content",
             "is_noise"
-          ]
+          ],
+          "additionalProperties": false
         }
       }
     },
     "required": [
       "questions"
-    ]
+    ],
+    "additionalProperties": false
   }
 }

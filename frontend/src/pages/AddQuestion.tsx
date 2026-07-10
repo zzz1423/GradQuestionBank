@@ -426,6 +426,7 @@ export default function AddQuestion() {
                           dangerouslySetInnerHTML={{
                             __html: (() => {
                               let html = q.content
+                                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                                 .replace(/\\\[([\s\S]*?)\\\]/g, (_: string, m: string) => {
                                   try { return katex.renderToString(m, { displayMode: true, throwOnError: false }); }
                                   catch { return '<span class="text-danger">' + m + '</span>'; }
@@ -442,7 +443,7 @@ export default function AddQuestion() {
                                   try { return katex.renderToString(m, { displayMode: false, throwOnError: false }); }
                                   catch { return '<span class="text-danger">' + m + '</span>'; }
                                 })
-                                .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                                // HTML already escaped before KaTeX rendering
                                 .replace(/\n/g, '<br>');
                               return html;
                             })()

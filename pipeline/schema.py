@@ -297,7 +297,7 @@ class NormalizedDocument:
             metadata=d.get("metadata", {}),
             schema_version=d.get("schema_version", SCHEMA_VERSION),
             pipeline_version=d.get("pipeline_version", PIPELINE_VERSION),
-            created_at=d.get("created_at", ""),
+            created_at=d.get("created_at") or datetime.now(timezone.utc).isoformat(),
         )
 
 
@@ -362,7 +362,7 @@ class AnnotatedDocument:
             annotations=[Annotation.from_dict(a) for a in d.get("annotations", [])],
             schema_version=d.get("schema_version", SCHEMA_VERSION),
             pipeline_version=d.get("pipeline_version", PIPELINE_VERSION),
-            created_at=d.get("created_at", ""),
+            created_at=d.get("created_at") or datetime.now(timezone.utc).isoformat(),
         )
 
 
@@ -457,7 +457,7 @@ class QuestionSet:
             provenance=Provenance.from_dict(prov) if prov else None,
             schema_version=d.get("schema_version", SCHEMA_VERSION),
             pipeline_version=d.get("pipeline_version", PIPELINE_VERSION),
-            created_at=d.get("created_at", ""),
+            created_at=d.get("created_at") or datetime.now(timezone.utc).isoformat(),
         )
 
 
@@ -468,7 +468,11 @@ class QuestionSet:
 def make_document_id(source_path: str) -> str:
     """Generate a deterministic document_id from source file path and size."""
     p = Path(source_path)
-    content = f"{p.name}:{p.stat().st_size}"
+    try:
+        size = p.stat().st_size
+    except OSError:
+        size = 0
+    content = f"{p.name}:{size}"
     h = hashlib.md5(content.encode()).hexdigest()[:8]
     return f"{p.stem}_{h}"
 

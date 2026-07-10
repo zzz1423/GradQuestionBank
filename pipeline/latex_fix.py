@@ -74,10 +74,13 @@ def _extend(text: str, pos: int) -> int:
         ch = text[i]
         # Opening brace - consume balanced pair
         if ch == "{":
-            d = 1; i += 1
+            d = 1
+            i += 1
             while i < n and d > 0:
-                if text[i] == "{": d += 1
-                elif text[i] == "}": d -= 1
+                if text[i] == "{":
+                    d += 1
+                elif text[i] == "}":
+                    d -= 1
                 i += 1
             continue
         # Closing brace - closes a brace opened before the segment
@@ -88,20 +91,26 @@ def _extend(text: str, pos: int) -> int:
         if ch in "^_":
             i += 1
             if i < n and text[i] == "{":
-                d = 1; i += 1
+                d = 1
+                i += 1
                 while i < n and d > 0:
-                    if text[i] == "{": d += 1
-                    elif text[i] == "}": d -= 1
+                    if text[i] == "{":
+                        d += 1
+                    elif text[i] == "}":
+                        d -= 1
                     i += 1
             elif i < n:
                 i += 1
             continue
         # Parentheses
         if ch == "(":
-            d = 1; i += 1
+            d = 1
+            i += 1
             while i < n and d > 0:
-                if text[i] == "(": d += 1
-                elif text[i] == ")": d -= 1
+                if text[i] == "(":
+                    d += 1
+                elif text[i] == ")":
+                    d -= 1
                 i += 1
             continue
         # Closing paren - standalone
