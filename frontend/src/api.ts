@@ -1,4 +1,4 @@
-const BASE = '';
+﻿const BASE = '';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
@@ -41,6 +41,18 @@ export const api = {
   addKP: (chapterId: number, name: string, description?: string) =>
     request(`/api/chapters/${chapterId}/kps`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description }) }),
   deleteKP: (id: number) => request(`/api/kps/${id}`, { method: 'DELETE' }),
+  knowledgeTree: (params?: { subject_id?: number; chapter_id?: number }) => {
+    const qs = params ? '?' + new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])
+    ).toString() : '';
+    return request(`/api/knowledge-tree${qs}`);
+  },
+  kpChildren: (kpId: number) => request(`/api/kps/${kpId}/children`),
+  kpParent: (kpId: number) => request(`/api/kps/${kpId}/parent`),
+  moveKP: (kpId: number, newParentId: number | null) =>
+    request('/api/kps/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kp_id: kpId, new_parent_id: newParentId }) }),
+  mergeKP: (sourceId: number, targetId: number) =>
+    request('/api/kps/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_id: sourceId, target_id: targetId }) }),
   questions: (params: Record<string, string | number | undefined | null> = {}) =>
     request<Record<string, unknown>>(`/api/questions${qs(params)}`),
   addQuestion: (data: Record<string, unknown>) =>
@@ -74,4 +86,16 @@ export const api = {
     if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `HTTP ${res.status}`); }
     return res.json();
   },
+  // ── PDF Import Tasks ─────────────────────────────────────
+  pdfImport: async (file: File, subjects?: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (subjects) fd.append('subjects', subjects);
+    const res = await fetch('/api/pdf/import', { method: 'POST', body: fd });
+    if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `HTTP ${res.status}`); }
+    return res.json() as Promise<{ task_id: string; status: string }>;
+  },
+  getTask: (taskId: string) => request<Record<string, unknown>>(`/api/tasks/${taskId}`),
+  listTasks: () => request<unknown[]>('/api/tasks'),
+  getTaskResult: (taskId: string) => request<Record<string, unknown>>(`/api/tasks/${taskId}/result`),
 };

@@ -18,10 +18,12 @@ export default function AddQuestion() {
   const [source, setSource] = useState('');
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [multiQuestions, setMultiQuestions] = useState<{content: string; answer: string; selected: boolean}[]>([]);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiProvider, setAiProvider] = useState('deepseek');
   const [previewHtml, setPreviewHtml] = useState('');
+  const [toast, setToast] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Knowledge point state
@@ -61,10 +63,22 @@ export default function AddQuestion() {
       if (!content.trim()) { setPreviewHtml(''); return; }
       try {
         let html = content
+          // \[...\] -> display math
+          .replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => {
+            try { return katex.renderToString(m, { displayMode: true, throwOnError: false }); }
+            catch { return `<span class="text-danger">${escapeHtml(m)}</span>`; }
+          })
+          // \(...\) -> inline math
+          .replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => {
+            try { return katex.renderToString(m, { displayMode: false, throwOnError: false }); }
+            catch { return `<span class="text-danger">${escapeHtml(m)}</span>`; }
+          })
+          // $$...$$ -> display math
           .replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => {
             try { return katex.renderToString(m, { displayMode: true, throwOnError: false }); }
             catch { return `<span class="text-danger">${escapeHtml(m)}</span>`; }
           })
+          // $...$ -> inline math
           .replace(/\$([^$]+?)\$/g, (_, m) => {
             try { return katex.renderToString(m, { displayMode: false, throwOnError: false }); }
             catch { return `<span class="text-danger">${escapeHtml(m)}</span>`; }
@@ -119,11 +133,23 @@ export default function AddQuestion() {
       const subjName = subjects.find(s => String(s.id) === subjectId)?.name || '';
       const result = await api.analyzeQuestion({ content: '', subject_name: subjName, image: imageBase64 }) as AnalysisResult;
       if (result.error) { setAiError(result.error); return; }
+      // Check for multi-question result
+      if ((result as any).questions && Array.isArray((result as any).questions) && (result as any).questions.length > 1) {
+        const qs = (result as any).questions.map((q: any) => ({
+          content: q.content || q.latex_content || '',
+          answer: q.answer || '',
+          selected: true,
+        }));
+        setMultiQuestions(qs);
+        return;
+      }
+      // Single question - normal flow
+      setMultiQuestions([]);
       if (result.latex_content) setContent(result.latex_content);
       else if (result.content) setContent(result.content);
       if (result.answer) setAnswer(result.answer);
       // Process knowledge points
-      const newKps: SelectedKP[] = (result.knowledge_points || []).map(kp => {
+      const newKps: SelectedKP[] = (result.knowledge_points || []).map((kp: any) => {
         const existing = allKps.find(ak => ak.name === kp.name);
         return {
           id: existing?.id || Date.now() + Math.random(),
@@ -137,7 +163,14 @@ export default function AddQuestion() {
         const existingIds = new Set(prev.map(k => k.id));
         return [...prev, ...newKps.filter(k => !existingIds.has(k.id))];
       });
-    } catch (e) { setAiError((e as Error).message); }
+      if (newKps.length > 0) {
+        setToast('AI 分析完成，识别到 ' + newKps.length + ' 个知识点');
+        setTimeout(() => setToast(''), 4000);
+      } else {
+        setToast('AI 分析完成，未识别到新的知识点');
+        setTimeout(() => setToast(''), 4000);
+      }
+    } catch (e) { setAiError((e as Error).message); setToast('分析失败: ' + (e as Error).message); setTimeout(() => setToast(''), 5000); }
     finally { setAiLoading(false); }
   };
 
@@ -148,12 +181,16 @@ export default function AddQuestion() {
     setAiError('');
     try {
       const subjName = subjects.find(s => String(s.id) === subjectId)?.name || '';
-      const result = await api.analyzeQuestion({ content, subject_name: subjName }) as AnalysisResult;
-      if (result.error) { setAiError(result.error); return; }
+      const raw = await api.analyzeQuestion({ content, subject_name: subjName }) as any;
+      if (raw.error) { setAiError(raw.error); return; }
+      // Handle multi-question array response: pick first question
+      const result = raw.questions ? raw.questions[0] : raw;
+      if (!result) { setAiError('AI 返回了空结果'); return; }
       if (result.latex_content) setContent(result.latex_content);
+      else if (result.content) setContent(result.content);
       if (result.answer && !answer) setAnswer(result.answer);
       // Convert AI result to selected KPs
-      const newKps: SelectedKP[] = (result.knowledge_points || []).map(kp => {
+      const newKps: SelectedKP[] = (result.knowledge_points || []).map((kp: any) => {
         const existing = allKps.find(ak => ak.name === kp.name);
         return {
           id: existing?.id || Date.now() + Math.random(),
@@ -167,7 +204,18 @@ export default function AddQuestion() {
         const existingIds = new Set(prev.map(k => k.id));
         return [...prev, ...newKps.filter(k => !existingIds.has(k.id))];
       });
-    } catch (e) { setAiError((e as Error).message); }
+      if (newKps.length > 0) {
+        setToast('分析完成，识别到 ' + newKps.length + ' 个知识点');
+        setTimeout(() => setToast(''), 4000);
+      } else {
+        // Debug: show what the API returned
+        const debugInfo = result.knowledge_points
+          ? '知识点数量: ' + result.knowledge_points.length
+          : '无 knowledge_points 字段。返回内容: ' + JSON.stringify(result).substring(0, 200);
+        setToast('分析完成但未识别到知识点。' + debugInfo);
+        setTimeout(() => setToast(''), 8000);
+      }
+    } catch (e) { setAiError((e as Error).message); setToast('分析失败: ' + (e as Error).message); setTimeout(() => setToast(''), 5000); }
     finally { setAiLoading(false); }
   };
 
@@ -232,6 +280,32 @@ export default function AddQuestion() {
     setContent(text);
   };
 
+  // Multi-question helpers
+  const toggleMultiQ = (idx: number) => {
+    setMultiQuestions(prev => prev.map((q, i) => i === idx ? { ...q, selected: !q.selected } : q));
+  };
+  const updateMultiQ = (idx: number, field: 'content' | 'answer', value: string) => {
+    setMultiQuestions(prev => prev.map((q, i) => i === idx ? { ...q, [field]: value } : q));
+  };
+  const saveMultiQuestions = async () => {
+    if (!subjectId) { alert('请先选择学科'); return; }
+    const toSave = multiQuestions.filter(q => q.selected);
+    if (toSave.length === 0) { alert('请至少选择一道题目'); return; }
+    try {
+      for (const q of toSave) {
+        await api.addQuestion({ subject_id: Number(subjectId), content: q.content, answer: q.answer, source });
+      }
+      navigate('/questions');
+    } catch (e) {
+      alert('保存失败：' + (e as Error).message);
+    }
+  };
+  const saveMultiQAsSingle = (idx: number) => {
+    const q = multiQuestions[idx];
+    setContent(q.content);
+    setAnswer(q.answer);
+  };
+
   // Save question + knowledge points together
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,6 +339,8 @@ export default function AddQuestion() {
       </div>
 
       <form onSubmit={submit}>
+        {aiError && <div className="alert alert-danger py-2 mb-3"><i className="bi bi-exclamation-circle"></i> {aiError}</div>}
+        {aiLoading && <div className="alert alert-info py-2 mb-3"><span className="spinner-border spinner-border-sm me-2"></span>AI 正在分析中，请稍候...</div>}
         <div className="row g-3 mb-3">
           <div className="col-md-6">
             <label className="form-label">学科 <span className="text-danger">*</span></label>
@@ -322,8 +398,77 @@ export default function AddQuestion() {
             )}
             <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
               onChange={e => { if (e.target.files?.[0]) handleImage(e.target.files[0]); }} />
-            {aiError && <div className="alert alert-danger py-1 mt-2 mb-0"><small>{aiError}</small></div>}
+            {/* aiError displayed at top of form */}
           </div>
+          {multiQuestions.length > 0 && (
+            <div className="col-12 mb-3">
+              <div className="card border-primary">
+                <div className="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                  <span><i className="bi bi-list-ol"></i> 检测到 {multiQuestions.length} 道题目</span>
+                  <button type="button" className="btn btn-sm btn-light" onClick={() => setMultiQuestions([])}>
+                    <i className="bi bi-x-lg"></i> 关闭
+                  </button>
+                </div>
+                <div className="card-body">
+                  {multiQuestions.map((q, idx) => (
+                    <div key={idx} className={`card mb-2 ${q.selected ? 'border-success' : 'border-secondary'}`}>
+                      <div className="card-body p-3">
+                        <div className="form-check mb-2">
+                          <input className="form-check-input" type="checkbox" checked={q.selected}
+                            onChange={() => toggleMultiQ(idx)} id={`mq-${idx}`} />
+                          <label className="form-check-label fw-bold" htmlFor={`mq-${idx}`}>题目 {idx + 1}</label>
+                          <button type="button" className="btn btn-sm btn-outline-primary ms-2"
+                            onClick={() => saveMultiQAsSingle(idx)}>
+                            <i className="bi bi-pencil"></i> 编辑此题
+                          </button>
+                        </div>
+                        <div className="mb-2 p-2 bg-light rounded" style={{ fontSize: '0.9em', lineHeight: 1.8 }}
+                          dangerouslySetInnerHTML={{
+                            __html: (() => {
+                              let html = q.content
+                                .replace(/\\\[([\s\S]*?)\\\]/g, (_: string, m: string) => {
+                                  try { return katex.renderToString(m, { displayMode: true, throwOnError: false }); }
+                                  catch { return '<span class="text-danger">' + m + '</span>'; }
+                                })
+                                .replace(/\\\(([\s\S]*?)\\\)/g, (_: string, m: string) => {
+                                  try { return katex.renderToString(m, { displayMode: false, throwOnError: false }); }
+                                  catch { return '<span class="text-danger">' + m + '</span>'; }
+                                })
+                                .replace(/\$\$([\s\S]*?)\$\$/g, (_: string, m: string) => {
+                                  try { return katex.renderToString(m, { displayMode: true, throwOnError: false }); }
+                                  catch { return '<span class="text-danger">' + m + '</span>'; }
+                                })
+                                .replace(/\$([^$]+?)\$/g, (_: string, m: string) => {
+                                  try { return katex.renderToString(m, { displayMode: false, throwOnError: false }); }
+                                  catch { return '<span class="text-danger">' + m + '</span>'; }
+                                })
+                                .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                                .replace(/\n/g, '<br>');
+                              return html;
+                            })()
+                          }} />
+                        <textarea className="form-control form-control-sm mb-2" rows={2}
+                          value={q.content} style={{ fontFamily: 'monospace', fontSize: '0.85em' }}
+                          onChange={e => updateMultiQ(idx, 'content', e.target.value)} />
+                        <label className="form-label mb-1"><small className="text-muted">答案</small></label>
+                        <input type="text" className="form-control form-control-sm"
+                          placeholder="填写答案" value={q.answer}
+                          onChange={e => updateMultiQ(idx, 'answer', e.target.value)} />
+                      </div>
+                    </div>
+                  ))}
+                  <div className="d-flex gap-2 mt-3">
+                    <button type="button" className="btn btn-primary" onClick={saveMultiQuestions}
+                      disabled={!subjectId || multiQuestions.filter(q => q.selected).length === 0}>
+                      <i className="bi bi-save"></i> 批量保存选中的题目 ({multiQuestions.filter(q => q.selected).length} 道)
+                    </button>
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => setMultiQuestions([])}>取消</button>
+                    {!subjectId && <small className="text-danger align-self-center">请先选择学科</small>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="col-md-6">
             <label className="form-label">LaTeX 预览</label>
             <div className="border rounded p-3" style={{ minHeight: 200, lineHeight: 1.8, overflowY: 'auto' }}
@@ -432,6 +577,17 @@ export default function AddQuestion() {
           <Link to="/questions" className="btn btn-outline-secondary btn-lg">取消</Link>
         </div>
       </form>
+
+      {toast && (
+        <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1050 }}>
+          <div className="toast show align-items-center text-bg-primary border-0" role="alert">
+            <div className="d-flex">
+              <div className="toast-body"><i className="bi bi-info-circle"></i> {toast}</div>
+              <button type="button" className="btn-close btn-close-white me-2 m-auto" onClick={() => setToast('')}></button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

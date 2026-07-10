@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+﻿import { useState, useEffect, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api';
 
@@ -60,6 +60,11 @@ export default function Layout({ children }: { children: ReactNode }) {
               </Link>
             </li>
             <li className="nav-item">
+              <Link className={`nav-link ${location.pathname === '/pdf-import' ? 'active' : ''}`} to="/pdf-import">
+                <i className="bi bi-file-earmark-pdf"></i> PDF 导入
+              </Link>
+            </li>
+            <li className="nav-item">
               <Link className={`nav-link ${location.pathname === '/settings' ? 'active' : ''}`} to="/settings">
                 <i className="bi bi-gear"></i> 设置
               </Link>
@@ -93,6 +98,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                   <li><Link className="nav-link" to="/subjects">学科管理</Link></li>
                   <li><Link className="nav-link" to="/questions">题目列表</Link></li>
                   <li><Link className="nav-link" to="/statistics">统计分析</Link></li>
+                  <li><Link className="nav-link" to="/pdf-import">PDF 导入</Link></li>
                   <li><Link className="nav-link" to="/settings">设置</Link></li>
                 </ul>
               </div>

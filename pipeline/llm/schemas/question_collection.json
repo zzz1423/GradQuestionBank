@@ -1,0 +1,88 @@
+{
+  "name": "QuestionCollection",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "questions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string",
+              "minLength": 1
+            },
+            "question_type": {
+              "type": "string",
+              "enum": [
+                "choice",
+                "fill_blank",
+                "true_false",
+                "short_answer",
+                "calculation",
+                "proof",
+                "comprehensive",
+                "unknown"
+              ]
+            },
+            "subject_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "knowledge_points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "chapter": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "primary",
+                      "secondary"
+                    ]
+                  },
+                  "weight": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                  }
+                },
+                "required": [
+                  "name",
+                  "chapter",
+                  "role",
+                  "weight"
+                ]
+              }
+            },
+            "source_page": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1
+            }
+          },
+          "required": [
+            "content",
+            "question_type",
+            "subject_name",
+            "knowledge_points"
+          ]
+        }
+      }
+    },
+    "required": [
+      "questions"
+    ]
+  }
+}

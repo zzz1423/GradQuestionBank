@@ -20,3 +20,19 @@ Thumbs.db
 # React frontend
 frontend/node_modules/
 frontend/dist/
+
+# Pipeline output and uploads
+data/pipeline-output/
+data/tasks/
+data/uploads/
+data/grad.db
+
+# PDF files in root
+*.pdf
+
+# Temporary scripts
+_*.py
+
+# Node
+pnpm-lock.yaml
+data/mineru-output/

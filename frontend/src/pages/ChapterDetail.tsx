@@ -1,13 +1,17 @@
-﻿import { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import type { Chapter, KnowledgePoint } from '../types';
+
+interface TreeKP extends KnowledgePoint {
+  children?: TreeKP[];
+}
 
 export default function ChapterDetail() {
   const { id } = useParams();
   const chapterId = Number(id);
   const [chapter, setChapter] = useState<Chapter | null>(null);
-  const [kps, setKps] = useState<KnowledgePoint[]>([]);
+  const [kps, setKps] = useState<TreeKP[]>([]);
   const [kpName, setKpName] = useState('');
   const [kpDesc, setKpDesc] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -38,6 +42,27 @@ export default function ChapterDetail() {
       await api.deleteKP(kpId);
       load();
     } catch (e) { alert((e as Error).message); }
+  };
+
+  const renderKPList = (items: TreeKP[], depth = 0) => {
+    return items.map(kp => (
+      <React.Fragment key={kp.id}>
+        <tr>
+          <td style={{ paddingLeft: `${16 + depth * 24}px` }}>
+            {depth > 0 && <span className="text-muted me-1">{'└─'}</span>}
+            <strong>{kp.name}</strong>
+            {kp.description && <><br /><small className="text-muted">{kp.description}</small></>}
+          </td>
+          <td><span className="badge bg-info">{kp.question_count || 0}</span></td>
+          <td>
+            <button className="btn btn-sm btn-outline-danger" onClick={() => deleteKP(kp.id)} title="删除">
+              <i className="bi bi-trash"></i>
+            </button>
+          </td>
+        </tr>
+        {kp.children && kp.children.length > 0 && renderKPList(kp.children, depth + 1)}
+      </React.Fragment>
+    ));
   };
 
   if (!chapter) return <div className="text-center py-5"><div className="spinner-border"></div></div>;

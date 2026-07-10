@@ -1,4 +1,4 @@
-"""Grad Question Bank - REST API Backend (Flask).
+﻿"""Grad Question Bank - REST API Backend (Flask).
 
 Replaces the original server-rendered app. Serves JSON for the React frontend.
 Supports both SQLite and PostgreSQL (Neon) via NEON_DATABASE_URL env var.
@@ -11,17 +11,23 @@ import hashlib
 import requests as http_requests
 from datetime import datetime
 from io import BytesIO
+import threading
 
 from flask import Flask, request, jsonify, send_file, send_from_directory, g
 from flask_cors import CORS
 
 from latex_utils import clean_latex
+from pipeline.canonical import normalize_kp_name
+from pipeline.task_manager import TaskManager, run_pipeline_background
 from database import (
-    get_db, init_db, seed_db, USE_POSTGRES,
+    get_db, init_db, seed_db, seed_from_syllabus, USE_POSTGRES, DB_PATH,
     _execute, _fetchone, _fetchall,
 )
 
 app = Flask(__name__)
+
+# Task manager for background PDF pipeline
+task_manager = TaskManager()
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
@@ -99,7 +105,10 @@ def _ai_headers(config):
 def _get_ai_config():
     """Get AI configuration from database settings, with env var fallback."""
     provider = _get_setting("ai_provider", "deepseek")
-    api_key = _get_setting("api_key", "")
+    # Read provider-specific API key first, fall back to generic key
+    api_key = _get_setting(f"api_key_{provider}", "")
+    if not api_key:
+        api_key = _get_setting("api_key", "")
     api_url = _get_setting("api_url", "")
 
     # Fallback to environment variables
@@ -436,6 +445,8 @@ def api_question_add():
     answer = (data.get("answer") or "").strip()
     source = (data.get("source") or "").strip()
 
+    if not subject_id:
+        return jsonify({"error": "请选择学科"}), 400
     if not content:
         return jsonify({"error": "题干不能为空"}), 400
 
@@ -632,6 +643,38 @@ def api_question_review_save(question_id):
 
 # -- AI Analysis ------------------------------------------------------------
 
+def _fix_json_escapes(text):
+    """Fix unescaped backslashes in AI-generated JSON containing LaTeX."""
+    import json as _json
+    try:
+        _json.loads(text)
+        return text
+    except (_json.JSONDecodeError, ValueError):
+        pass
+
+    result = []
+    i = 0
+    while i < len(text):
+        if text[i] == '\\' and i + 1 < len(text):
+            next_char = text[i + 1]
+            if next_char in ('"', '\\', '/', 'n', 'r', 't', 'b', 'f', 'u'):
+                result.append(text[i:i+2])
+                i += 2
+            else:
+                result.append('\\\\')
+                i += 1
+        else:
+            result.append(text[i])
+            i += 1
+
+    fixed = ''.join(result)
+    try:
+        _json.loads(fixed)
+        return fixed
+    except (_json.JSONDecodeError, ValueError):
+        return text
+
+
 @app.route("/api/analyze-question", methods=["POST"])
 def api_analyze_question():
     db = g.db
@@ -687,16 +730,18 @@ def api_analyze_question():
         if config.get("vision"):
             vision_content = []
             vision_content.append({"type": "image_url", "image_url": {"url": image_base64}})
-            vision_content.append({"type": "text", "text": """请仔细分析这张图片中的题目，完成以下任务：
+            vision_content.append({"type": "text", "text": """请仔细分析这张图片中的所有题目。对于每道题：
 1. 题目内容：完整提取，数学公式用LaTeX（行内$...$，独立$$...$$）
 2. 答案：只填最终结果
 
-严格按JSON格式返回：{"content": "题目内容", "answer": "答案", "knowledge_points": [{"name": "知识点", "role": "primary", "weight": 1.0}], "tags": ["标签"]}"""})
+图中可能有多道题，请全部识别。严格按JSON数组格式返回：
+[{"content": "题目1内容", "answer": "答案1", "knowledge_points": [{"name": "知识点", "role": "primary", "weight": 1.0}], "tags": ["标签"]},
+ {"content": "题目2内容", "answer": "答案2", "knowledge_points": [{"name": "知识点", "role": "primary", "weight": 1.0}], "tags": ["标签"]}]
+
+如果只有一道题，也返回数组（长度为1）。"""})
             messages.append({"role": "user", "content": vision_content})
         else:
             return jsonify({"error": "请先输入题目内容，或使用 OCR 识别图片中的文字"}), 400
-    else:
-        messages.append({"role": "user", "content": text_content})
     else:
         messages.append({"role": "user", "content": text_content})
 
@@ -724,10 +769,40 @@ def api_analyze_question():
         result = resp.json()
         ai_text = result["choices"][0]["message"]["content"]
 
-        json_match = re.search(r"\{[\s\S]*\}", ai_text)
-        if json_match:
-            parsed = json.loads(json_match.group())
-        else:
+        # Strip markdown code fences if present
+        clean_text = ai_text.strip()
+        if clean_text.startswith("```"):
+            clean_text = re.sub(r"^```(?:json)?\s*", "", clean_text)
+            clean_text = re.sub(r"\s*```$", "", clean_text)
+
+        # Try to parse the full cleaned text as JSON first
+        parsed = None
+        try:
+            full_parsed = json.loads(_fix_json_escapes(clean_text))
+            if isinstance(full_parsed, list):
+                parsed = full_parsed  # array of questions
+            elif isinstance(full_parsed, dict):
+                parsed = full_parsed  # single object
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        if parsed is None:
+            # Fallback: try regex matching on the full text (outermost match)
+            json_array_match = re.search(r"\[\s*\{[\s\S]*\}\s*\]", clean_text)
+            json_obj_match = re.search(r"\{[\s\S]*\}", clean_text)
+
+            if json_array_match:
+                try:
+                    parsed = json.loads(_fix_json_escapes(json_array_match.group()))
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            if parsed is None and json_obj_match:
+                try:
+                    parsed = json.loads(_fix_json_escapes(json_obj_match.group()))
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        if parsed is None:
             parsed = {
                 "content": text_content,
                 "latex_content": text_content,
@@ -736,8 +811,20 @@ def api_analyze_question():
                 "raw": ai_text,
             }
 
-        if "latex_content" not in parsed:
-            parsed["latex_content"] = parsed.get("content", text_content)
+        # Handle array (multi-question) vs single object
+        if isinstance(parsed, list):
+            for item in parsed:
+                if "latex_content" not in item:
+                    item["latex_content"] = item.get("content", text_content)
+            if len(parsed) == 1:
+                parsed = parsed[0]
+                if "latex_content" not in parsed:
+                    parsed["latex_content"] = parsed.get("content", text_content)
+            else:
+                parsed = {"questions": parsed}
+        elif isinstance(parsed, dict):
+            if "latex_content" not in parsed:
+                parsed["latex_content"] = parsed.get("content", text_content)
 
         if text_content and cache_key:
             _execute(db,
@@ -1005,6 +1092,7 @@ def api_import():
                 chapter_id = chapter["id"]
             for kp_data in ch_data.get("knowledge_points", []):
                 kp_name = (kp_data.get("name") or "").strip()
+                kp_name = normalize_kp_name(kp_name)
                 if not kp_name:
                     continue
                 kp = _fetchone(_execute(db,
@@ -1035,6 +1123,7 @@ def api_import():
 
         for kp_data in q_data.get("knowledge_points", []):
             kp_name = kp_data["name"]
+            kp_name = normalize_kp_name(kp_name)
             chapter_name = kp_data.get("chapter", "")
             if chapter_name:
                 chapter = _fetchone(_execute(db,
@@ -1089,14 +1178,17 @@ def api_settings_get():
     """Get all settings (masks API key for security)."""
     db = g.db
     settings = {}
-    has_api_key = False
+    provider_keys = {}
     try:
         rows = _fetchall(_execute(db, "SELECT key, value FROM settings"))
         for row in rows:
-            if row["key"] == "api_key":
-                has_api_key = bool(row["value"])
-            else:
-                settings[row["key"]] = row["value"]
+            settings[row["key"]] = row["value"]
+            # Track which providers have keys configured
+            if row["key"].startswith("api_key_") and row["value"]:
+                p = row["key"].replace("api_key_", "")
+                provider_keys[p] = True
+            elif row["key"] == "api_key" and row["value"]:
+                provider_keys.setdefault("deepseek", True)
     except Exception:
         pass
 
@@ -1105,7 +1197,9 @@ def api_settings_get():
     settings.setdefault("api_url", DEEPSEEK_API_URL)
     settings.setdefault("ai_model", "deepseek-chat")
 
-    settings["has_api_key"] = has_api_key
+    current_provider = settings.get("ai_provider", "deepseek")
+    settings["has_api_key"] = provider_keys.get(current_provider, False)
+    settings["provider_keys"] = provider_keys
     return jsonify(settings)
 
 
@@ -1118,16 +1212,36 @@ def api_settings_save():
     allowed_keys = {"ai_provider", "api_key", "api_url", "ai_model"}
     for key, value in data.items():
         if key in allowed_keys and isinstance(value, str):
-            _set_setting(key, value)
+            if key == "api_key":
+                # Save to provider-specific key
+                provider = data.get("ai_provider") or _get_setting("ai_provider", "deepseek")
+                if value.strip():
+                    _set_setting(f"api_key_{provider}", value.strip())
+                # Don't overwrite other providers' keys
+            elif key == "api_url" and not value.strip():
+                continue
+            else:
+                _set_setting(key, value)
 
     return jsonify({"message": "设置已保存"})
 
 
 @app.route("/api/settings/test", methods=["POST"])
 def api_settings_test():
-    """Test AI connection."""
+    """Test AI connection with provided or saved settings."""
     db = g.db
+    data = request.get_json(silent=True) or {}
+
+    # Use form values if provided, otherwise fall back to saved config
     config = _get_ai_config()
+    if data.get("api_key"):
+        config["api_key"] = data["api_key"]
+    if data.get("api_url"):
+        config["api_url"] = data["api_url"]
+    if data.get("ai_model"):
+        config["model"] = data["ai_model"]
+    if data.get("ai_provider"):
+        config["provider"] = data["ai_provider"]
 
     if not config["api_key"]:
         return jsonify({"success": False, "error": "未配置 API Key"}), 400
@@ -1173,8 +1287,107 @@ def serve_static(path):
 
 # -- Run -------------------------------------------------------------------
 
+# -- PDF Import (Background Task) -----------------------------------------
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "uploads")
+
+
+@app.route("/api/pdf/import", methods=["POST"])
+def api_pdf_import():
+    """Upload a PDF and start background pipeline processing."""
+    if "file" not in request.files:
+        return jsonify({"error": "请上传 PDF 文件"}), 400
+
+    file = request.files["file"]
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "仅支持 PDF 文件"}), 400
+
+    # Save uploaded file
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    pdf_name = file.filename
+    pdf_path = os.path.join(UPLOAD_DIR, pdf_name)
+    file.save(pdf_path)
+
+    # Optional: subjects filter from form data
+    subjects_raw = request.form.get("subjects", "")
+    subjects = [s.strip() for s in subjects_raw.split(",") if s.strip()] or None
+
+    # Create output directory
+    stem = os.path.splitext(pdf_name)[0]
+    output_base = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data", "pipeline-output", stem,
+    )
+
+    # Create task
+    task = task_manager.create_task(
+        pdf_name=pdf_name,
+        pdf_path=pdf_path,
+        output_directory=output_base,
+    )
+
+    # Start pipeline in background thread
+    from pipeline.llm.llm_client import LLMConfig
+
+    pipeline_kwargs = dict(
+        pdf_path=pdf_path,
+        output_base=output_base,
+        llm_config=LLMConfig(),
+        db_path=DB_PATH,
+        subjects=subjects,
+    )
+
+    thread = threading.Thread(
+        target=run_pipeline_background,
+        args=(task_manager, task.task_id, pipeline_kwargs),
+        daemon=True,
+    )
+    thread.start()
+
+    return jsonify({"task_id": task.task_id, "status": "pending"})
+
+
+@app.route("/api/tasks", methods=["GET"])
+def api_list_tasks():
+    """List all tasks."""
+    limit = request.args.get("limit", 50, type=int)
+    tasks = task_manager.list_tasks(limit=limit)
+    return jsonify([t.to_dict() for t in tasks])
+
+
+@app.route("/api/tasks/<task_id>", methods=["GET"])
+def api_get_task(task_id):
+    """Get a single task by ID."""
+    task = task_manager.get_task(task_id)
+    if not task:
+        return jsonify({"error": "任务不存在"}), 404
+    return jsonify(task.to_dict())
+
+
+
+
+@app.route("/api/tasks/<task_id>/result", methods=["GET"])
+def api_get_task_result(task_id):
+    """Get the import_ready.json result for a completed task."""
+    task = task_manager.get_task(task_id)
+    if not task:
+        return jsonify({"error": "任务不存在"}), 404
+    if task.status != "completed":
+        return jsonify({"error": "任务尚未完成", "status": task.status}), 400
+
+    import_ready = os.path.join(task.output_directory, "import_ready.json")
+    if not os.path.isfile(import_ready):
+        return jsonify({"error": "结果文件不存在"}), 404
+
+    with open(import_ready, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return jsonify(data)
 if __name__ == "__main__":
     init_db()
     seed_db()
+    # Load exam syllabi (idempotent, skips existing)
+    for f in ["data/exam_syllabus/math1.json", "data/exam_syllabus/math2.json",
+             "data/exam_syllabus/math3.json", "data/exam_syllabus/computer408.json"]:
+        seed_from_syllabus(f)
     print(f"Database: {'Postgres (Neon)' if USE_POSTGRES else 'SQLite'}")
     app.run(debug=True, port=5000)

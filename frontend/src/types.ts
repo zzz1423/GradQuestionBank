@@ -1,4 +1,4 @@
-export interface Subject {
+﻿export interface Subject {
   id: number;
   name: string;
   created_at: string;
@@ -88,3 +88,34 @@ export const MASTERY_LABELS: Record<number, string> = {
 export const MASTERY_COLORS: Record<number, string> = {
   0: 'secondary', 1: 'danger', 2: 'warning', 3: 'success',
 };
+
+// ── PDF Import Task ────────────────────────────────────────
+
+export interface ImportTask {
+  task_id: string;
+  pdf_name: string;
+  pdf_path: string;
+  output_directory: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  current_step: string;
+  current_question: number;
+  total_questions: number;
+  start_time: string;
+  finish_time: string;
+  elapsed_seconds: number;
+  error_message: string;
+  created_at: string;
+}
+
+export interface PdfImportQuestion {
+  subject_name: string;
+  content: string;
+  source: string;
+  knowledge_points: {
+    name: string;
+    chapter: string;
+    role: string;
+    weight: number;
+  }[];
+}

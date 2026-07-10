@@ -7,6 +7,7 @@ interface Settings {
   api_url: string;
   ai_model: string;
   has_api_key: boolean;
+  provider_keys?: Record<string, boolean>;
 }
 
 const PROVIDERS = [
@@ -28,24 +29,46 @@ export default function Settings() {
 
   useEffect(() => {
     api.getSettings().then(d => {
-      const s = d as unknown as Settings;
-      setSettings(s);
+      const raw = d as unknown as Record<string, string>;
+      const provider = raw.ai_provider || 'deepseek';
+      const providerKey = (raw as any)[`api_key_${provider}`] || '';
+      setSettings({
+        ai_provider: provider,
+        api_key: providerKey,
+        api_url: raw.api_url || '',
+        ai_model: raw.ai_model || 'deepseek-chat',
+        has_api_key: !!providerKey,
+        provider_keys: (raw as any).provider_keys,
+      });
     });
   }, []);
 
   const provider = PROVIDERS.find(p => p.id === settings.ai_provider) || PROVIDERS[0];
 
-  const handleProviderChange = (id: string) => {
+  const handleProviderChange = async (id: string) => {
     const p = PROVIDERS.find(pp => pp.id === id);
-    if (p) {
+    try {
+      const d = await api.getSettings() as unknown as Record<string, string>;
+      // Load provider-specific key from db (api_key_deepseek, api_key_mimo, etc.)
+      const providerKey = (d as any)[`api_key_${id}`] || '';
       setSettings({
-        ...settings,
+        ...(d as unknown as Settings),
         ai_provider: id,
-        api_url: p.url,
-        ai_model: p.models[0] || '',
+        api_url: p?.url || d.api_url || '',
+        ai_model: p?.models[0] || d.ai_model || '',
+        api_key: providerKey,  // Show saved key for this provider
+        has_api_key: !!providerKey,
       });
-    } else {
-      setSettings({ ...settings, ai_provider: id });
+    } catch {
+      if (p) {
+        setSettings({
+          ...settings,
+          ai_provider: id,
+          api_url: p.url,
+          ai_model: p.models[0] || '',
+          api_key: '',
+        });
+      }
     }
   };
 
@@ -57,7 +80,9 @@ export default function Settings() {
         api_url: settings.api_url,
         ai_model: settings.ai_model,
       };
-      if (settings.api_key) payload.api_key = settings.api_key;
+      if (settings.api_key) {
+        payload.api_key = settings.api_key;
+      }
       await api.saveSettings(payload);
       setToast('设置已保存');
       setTimeout(() => setToast(''), 3000);
@@ -72,11 +97,18 @@ export default function Settings() {
     setTesting(true);
     setTestResult(null);
     try {
-      // Save first if there's a new key
-      if (settings.api_key) {
-        await api.saveSettings({ api_key: settings.api_key, api_url: settings.api_url, ai_model: settings.ai_model, ai_provider: settings.ai_provider });
-      }
-      const result = await api.testSettings() as { success: boolean; message?: string; error?: string };
+      // Send current form values for testing (don't need to save first)
+      const payload: Record<string, string> = {
+        ai_provider: settings.ai_provider,
+        api_url: settings.api_url,
+        ai_model: settings.ai_model,
+      };
+      if (settings.api_key) payload.api_key = settings.api_key;
+      const result = await fetch('/api/settings/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(r => r.json()) as { success: boolean; message?: string; error?: string };
       setTestResult({ ok: result.success, msg: result.success ? result.message! : result.error! });
     } catch (e) {
       setTestResult({ ok: false, msg: (e as Error).message });
@@ -112,7 +144,7 @@ export default function Settings() {
                 <div className="input-group">
                   <input type={showKey ? 'text' : 'password'}
                     className="form-control"
-                    placeholder={settings.has_api_key ? '已配置（留空保持不变）' : '输入 API Key...'}
+                    placeholder={settings.has_api_key ? `${settings.ai_provider} 已配置（留空保持不变）` : '输入 API Key...'}
                     value={settings.api_key}
                     onChange={e => setSettings({ ...settings, api_key: e.target.value })} />
                   <button className="btn btn-outline-secondary" onClick={() => setShowKey(!showKey)}>
@@ -195,6 +227,14 @@ export default function Settings() {
                   <tr><td className="text-muted">服务商</td><td><span className="badge bg-primary">{provider.name}</span></td></tr>
                   <tr><td className="text-muted">模型</td><td><code>{settings.ai_model || '-'}</code></td></tr>
                   <tr><td className="text-muted">API Key</td><td>{settings.has_api_key ? <span className="badge bg-success">已配置</span> : <span className="badge bg-warning text-dark">未配置</span>}</td></tr>
+                  {settings.provider_keys && Object.keys(settings.provider_keys).length > 1 && (
+                    <tr><td className="text-muted" colSpan={2}>
+                      <small>已配置: {Object.keys(settings.provider_keys).map(k => {
+                        const pp = PROVIDERS.find(p => p.id === k);
+                        return <span key={k} className="badge bg-secondary me-1">{pp?.name || k}</span>;
+                      })}</small>
+                    </td></tr>
+                  )}
                 </tbody>
               </table>
             </div>

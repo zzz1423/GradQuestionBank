@@ -1,4 +1,4 @@
-"""Database abstraction layer supporting both SQLite and PostgreSQL (Neon).
+﻿"""Database abstraction layer supporting both SQLite and PostgreSQL (Neon).
 
 Set NEON_DATABASE_URL environment variable to use Postgres.
 Otherwise, SQLite is used (data/grad.db).
@@ -6,6 +6,7 @@ Otherwise, SQLite is used (data/grad.db).
 
 import os
 import json
+import pathlib
 from datetime import datetime
 
 # Detect which backend to use
@@ -390,6 +391,64 @@ def seed_db():
     conn.close()
 
 
+def seed_from_syllabus(syllabus_path: str):
+    """Load subjects/chapters/knowledge_points from an exam syllabus JSON file.
+
+    The JSON format matches data/exam_syllabus/*.json:
+    {
+      "exam_type": "数学一",
+      "subjects": {
+        "高等数学": { "章节名": ["知识点1", ...], ... },
+        "线性代数": { ... },
+        ...
+      }
+    }
+
+    This function is idempotent: existing subjects/chapters are matched by name,
+    and only missing entries are inserted.
+    """
+    import json
+    conn = get_db()
+    data = json.loads(pathlib.Path(syllabus_path).read_text(encoding="utf-8"))
+
+    for subject_name, chapters in data.get("subjects", {}).items():
+        # Find or create subject
+        cur = _execute(conn, "SELECT id FROM subjects WHERE name = ?", (subject_name,))
+        row = _fetchone(cur)
+        if row:
+            subject_id = row["id"]
+        else:
+            cur = _execute(conn, "INSERT INTO subjects (name) VALUES (?)", (subject_name,))
+            subject_id = cur.lastrowid
+
+        for sort_idx, (chapter_name, kps) in enumerate(chapters.items()):
+            # Find or create chapter
+            cur = _execute(conn,
+                "SELECT id FROM chapters WHERE name = ? AND subject_id = ?",
+                (chapter_name, subject_id))
+            row = _fetchone(cur)
+            if row:
+                chapter_id = row["id"]
+            else:
+                cur = _execute(conn,
+                    "INSERT INTO chapters (subject_id, name, sort_order) VALUES (?, ?, ?)",
+                    (subject_id, chapter_name, sort_idx))
+                chapter_id = cur.lastrowid
+
+            for kp_idx, kp_name in enumerate(kps):
+                # Skip if KP already exists in this chapter
+                cur = _execute(conn,
+                    "SELECT id FROM knowledge_points WHERE name = ? AND chapter_id = ?",
+                    (kp_name, chapter_id))
+                if _fetchone(cur):
+                    continue
+                _execute(conn,
+                    "INSERT INTO knowledge_points (chapter_id, name, sort_order) VALUES (?, ?, ?)",
+                    (chapter_id, kp_name, kp_idx))
+
+    conn.commit()
+    conn.close()
+
 # ── Legacy helpers (for backward compatibility) ───────────
 
 def dict_from_row(row):
@@ -408,3 +467,4 @@ def dicts_from_rows(rows):
     if isinstance(rows[0], dict):
         return rows
     return [dict(r) for r in rows]
+

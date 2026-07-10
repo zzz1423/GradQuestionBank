@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+﻿import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.min.css';
 import Layout from './components/Layout';
@@ -13,6 +13,7 @@ import EditQuestion from './pages/EditQuestion';
 import ReviewKnowledge from './pages/ReviewKnowledge';
 import BatchImport from './pages/BatchImport';
 import Statistics from './pages/Statistics';
+import PdfImport from './pages/PdfImport';
 import Settings from './pages/Settings';
 import './App.css';
 
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/questions/:id/edit" element={<EditQuestion />} />
           <Route path="/questions/:id/review" element={<ReviewKnowledge />} />
           <Route path="/statistics" element={<Statistics />} />
+          <Route path="/pdf-import" element={<PdfImport />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>
