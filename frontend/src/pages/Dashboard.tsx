@@ -71,7 +71,7 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {recent_questions.map((q: Question) => (
-                    <tr key={q.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/questions/${q.id}`)}>
+                    <tr key={q.id} role="button" tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => navigate(`/questions/${q.id}`)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') navigate(`/questions/${q.id}`); }}>
                       <td><span className="badge bg-primary">{q.subject_name}</span></td>
                       <td>{q.content.length > 80 ? q.content.slice(0, 80) + '...' : q.content}</td>
                       <td>

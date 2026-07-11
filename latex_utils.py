@@ -83,9 +83,9 @@ def clean_latex(text):
 
     # Remove document-level formatting commands
     text = re.sub(r'\\noindent\*?', '', text)
-    text = re.sub(r'\\textbf\{([^}]*)\}', r'**\1**', text)
-    text = re.sub(r'\\textit\{([^}]*)\}', r'*\1*', text)
-    text = re.sub(r'\\emph\{([^}]*)\}', r'*\1*', text)
+    text = _replace_brace_command(text, r'\\textbf\s*(?=\{)', lambda inner: f'**{inner}**')
+    text = _replace_brace_command(text, r'\\textit\s*(?=\{)', lambda inner: f'*{inner}*')
+    text = _replace_brace_command(text, r'\\emph\s*(?=\{)', lambda inner: f'*{inner}*')
 
     # Remove spacing commands
     text = re.sub(r'\\(bigskip|medskip|smallskip)\*?', '', text)

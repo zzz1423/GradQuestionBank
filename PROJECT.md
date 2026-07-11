@@ -8,10 +8,9 @@
 
 面向考研学生的智能题库管理系统。核心流程：
 
-```
+```text
 录入题目 -> AI 分析知识点 -> 用户审核/调整 -> 标记掌握情况 -> 统计薄弱环节
-```
-
+```text
 支持两种题目来源：
 1. **手动录入**：文字 + 图片 + AI 识别
 2. **PDF 批量导入**：PDF → MinerU → 规则引擎 → LLM → 题库
@@ -42,13 +41,12 @@ python app.py
 
 # 访问
 # http://127.0.0.1:5000
-```
-
+```text
 ---
 
 ## 项目结构
 
-```
+```text
 GradQuestionBank/
 ├── app.py                    # Flask 主应用
 ├── database.py               # 数据库建表、种子数据、迁移
@@ -92,13 +90,12 @@ GradQuestionBank/
 └── docs/
     └── schema/
         └── document_object_model.md
-```
-
+```text
 ---
 
 ## PDF 流水线架构
 
-```
+```text
 PDF
  ↓ MinerU CLI (-b pipeline)
 Raw (content_list_v2.json)
@@ -116,8 +113,7 @@ questions/question_0001.repaired.json ...
 questions/question_0001.enriched.json ...
  ↓ pipeline/merger.py
 import_ready.json → /api/import → 题库数据库
-```
-
+```text
 ### 设计原则
 - **不可变**：每层产出新数据，不修改上一层
 - **逐题处理**：每题独立 LLM 调用，支持断点恢复
@@ -138,8 +134,7 @@ question_knowledge_points (question_id, knowledge_point_id, role, weight)
 tags (id, name, created_at)
 question_tags (question_id, tag_id)
 settings (key, value)
-```
-
+```text
 ---
 
 ## API 端点

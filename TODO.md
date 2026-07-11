@@ -56,7 +56,7 @@
   - 逐题切分（`pipeline/splitter.py`）
   - 逐题 LLM 丰富（`pipeline/enricher.py`）
   - 断点恢复：中断后自动跳过已完成步骤
-  - 中间文件保留：questions/*.json + *.enriched.json
+  - 中间文件保留：`questions/*.json` + `*.enriched.json`
   - 合并器（`pipeline/merger.py`）→ import_ready.json
 
 ---

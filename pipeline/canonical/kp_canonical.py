@@ -24,6 +24,7 @@ ALIASES_PATH = Path(__file__).parent / "kp_aliases.json"
 
 # Internal alias map — loaded once, reloaded on demand
 _alias_map: dict[str, str] = {}
+_alias_lock = threading.Lock()
 _loaded = False
 
 
@@ -111,17 +112,17 @@ def add_alias(alias: str, canonical: str) -> None:
         old = _alias_map.get(alias)
         _alias_map[alias] = canonical
 
-    # Persist to file
-    try:
-        raw = json.loads(ALIASES_PATH.read_text(encoding="utf-8"))
-        raw[alias] = canonical
-        ALIASES_PATH.write_text(
-            json.dumps(raw, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        logger.info(f"Added KP alias: '{alias}' -> '{canonical}'")
-    except Exception as e:
-        logger.error(f"Failed to persist alias '{alias}': {e}")
+        # Persist to file under the same lock
+        try:
+            raw = json.loads(ALIASES_PATH.read_text(encoding="utf-8")) if ALIASES_PATH.exists() else {}
+            raw[alias] = canonical
+            ALIASES_PATH.write_text(
+                json.dumps(raw, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            logger.info(f"Added KP alias: '{alias}' -> '{canonical}'")
+        except Exception as e:
+            logger.error(f"Failed to persist alias '{alias}': {e}")
 
 
 def get_all_canonical_names() -> set[str]:

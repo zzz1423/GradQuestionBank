@@ -196,14 +196,16 @@ def repair_all_questions(
         stem_text = question_data.get("stem_text", "")
         block_metadata = question_data.get("block_metadata", {})
 
-        # Get neighboring questions for context (from cache)
+        # Get neighboring questions for context (from cache, index-based)
+        current_idx = i - 1  # 0-based index
         context_parts = []
-        for other_q, other_text in _question_text_cache.items():
-            if other_q == qpath:
-                continue
-            if other_text:
-                context_parts.append(other_text[:200])
-        neighbors_text = "\n".join(context_parts[:3])
+        for offset in (-2, -1, 1, 2):
+            neighbor_idx = current_idx + offset
+            if 0 <= neighbor_idx < len(question_files):
+                neighbor_text = _question_text_cache.get(question_files[neighbor_idx], "")
+                if neighbor_text:
+                    context_parts.append(neighbor_text[:200])
+        neighbors_text = "\n".join(context_parts)
 
         # Repair
         result = repair_question_text(
