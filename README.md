@@ -30,12 +30,14 @@
 
 ```bash
 pip install flask requests
-```text
+```
+
 ### 2. 启动应用
 
 ```bash
 python app.py
-```text
+```
+
 浏览器打开 `http://127.0.0.1:5000` 即可使用。
 
 ### 3. 配置 AI（首次使用需配置）
@@ -71,7 +73,8 @@ GradQuestionBank/
 ├── TODO.md             # 开发计划与进度
 ├── PROJECT.md          # 项目详细文档
 └── README.md           # 本文件
-```text
+```
+
 ## 数据备份
 
 数据库文件位于 `data/grad.db`，备份只需复制此文件。恢复时将文件放回 `data/` 目录即可。

@@ -48,7 +48,8 @@ questions/question_0001.repaired.json ...
 questions/question_0001.enriched.json ...
  ↓ pipeline/merger.py
 import_ready.json → /api/import
-```text
+```
+
 ### LLM Splitter (splitter_llm.py)
 Sits between rule engine and splitter. Uses LLM to:
 - Split multi-question blocks into individual questions
@@ -104,7 +105,8 @@ pipe = Pipeline(
 )
 result = pipe.run()           # Full pipeline
 result = pipe.run_from("enrich")  # Resume from enrichment step
-```text
+```
+
 ### Output Structure
 
 ```text
@@ -118,7 +120,8 @@ data/pipeline-output/<doc>/
 │   └── ...
 ├── import_ready.json        # Final merged output
 └── pipeline_state.json      # Checkpoint state
-```text
+```
+
 ## LLM Notes
 
 - LM Studio 0.4.19 with "Enable Thinking = Off" disables reasoning via GUI
