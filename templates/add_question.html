@@ -279,9 +279,14 @@ function cleanLatexInput() {
     text = text.replace(/\\begin\{document\}/g, '');
     text = text.replace(/\\end\{document\}/g, '');
     
-    // Step 3: Convert sections to headers
-    text = text.replace(/\\section\*\{([^}]+)\}/g, '## $1');
-    text = text.replace(/\\subsection\*\{([^}]+)\}/g, '### $1');
+    // Step 3: Remove document-level formatting and sections
+    text = text.replace(/\\noindent\*?/g, '');
+    text = text.replace(/\\textbf\{([^}]*)\}/g, '**$1**');
+    text = text.replace(/\\textit\{([^}]*)\}/g, '*$1*');
+    text = text.replace(/\\emph\{([^}]*)\}/g, '*$1*');
+    text = text.replace(/\\(bigskip|medskip|smallskip)\*?/g, '');
+    text = text.replace(/\\section\*?\{[^}]*\}/g, '');
+    text = text.replace(/\\subsection\*?\{[^}]*\}/g, '');
     
     // Step 4: Fix common AI typos
     text = text.replace(/\\\$\$6pt\]/g, '\\\\[6pt]');
