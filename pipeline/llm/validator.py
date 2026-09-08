@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import re
 import logging
-from typing import TypeVar, Type
+from typing import Any, TypeVar, Type
 
 from pydantic import BaseModel, ValidationError
 
@@ -225,7 +225,7 @@ def extract_and_validate(
 def extract_and_validate_with_retry(
     client: LLMClient,
     system_prompt: str,
-    user_prompt: str,
+    user_prompt: Any,
     model_class: Type[T],
     max_retries: int = 2,
     json_schema: dict | None = None,
@@ -238,7 +238,7 @@ def extract_and_validate_with_retry(
     Args:
         client: LLM client instance.
         system_prompt: System message.
-        user_prompt: User message.
+        user_prompt: User message (string or OpenAI-compatible content list).
         model_class: Pydantic model to validate against.
         max_retries: Maximum number of attempts (default 2 = 1 initial + 1 retry).
 
@@ -257,11 +257,17 @@ def extract_and_validate_with_retry(
             current_user_prompt = user_prompt
         else:
             error_summary = "\n".join(all_errors[-3:])  # Last 3 errors
-            current_user_prompt = (
-                f"{user_prompt}\n\n"
+            feedback = (
                 f"YOUR PREVIOUS RESPONSE WAS INVALID. Error:\n{error_summary}\n\n"
                 f"Please return ONLY valid JSON conforming to the schema. No markdown, no explanation."
             )
+            if isinstance(user_prompt, list):
+                current_user_prompt = [
+                    *user_prompt,
+                    {"type": "text", "text": feedback},
+                ]
+            else:
+                current_user_prompt = f"{user_prompt}\n\n{feedback}"
 
         try:
             response = client.chat(system=system_prompt, user=current_user_prompt, json_schema=json_schema)

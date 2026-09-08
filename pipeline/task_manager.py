@@ -232,8 +232,6 @@ def run_pipeline_background(
         task_id: Task ID to update
         pipeline_kwargs: Kwargs passed to Pipeline.__init__
     """
-    from pipeline.pipeline import Pipeline
-
     task_manager.update_task(task_id, status="running")
     callback = task_manager.make_progress_callback(task_id)
 
@@ -242,8 +240,14 @@ def run_pipeline_background(
     pipeline_kwargs["progress_callback"] = callback
 
     try:
-        pipe = Pipeline(**pipeline_kwargs)
-        result = pipe.run()
+        auto_import = pipeline_kwargs.pop("auto_import", True)
+        if auto_import:
+            from pipeline.page_pipeline import run_page_pipeline
+            result = run_page_pipeline(**pipeline_kwargs)
+        else:
+            from pipeline.pipeline import Pipeline
+            pipe = Pipeline(**pipeline_kwargs)
+            result = pipe.run()
 
         # Verify import_ready.json exists
         import os

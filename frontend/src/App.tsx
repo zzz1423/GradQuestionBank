@@ -15,6 +15,10 @@ import BatchImport from './pages/BatchImport';
 import Statistics from './pages/Statistics';
 import PdfImport from './pages/PdfImport';
 import Settings from './pages/Settings';
+import DedupReview from './pages/DedupReview';
+import Exams from './pages/Exams';
+import PracticeRecord from './pages/PracticeRecord';
+import Review from './pages/Review';
 import './App.css';
 
 export default function App() {
@@ -23,6 +27,8 @@ export default function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/exams" element={<Exams />} />
+          <Route path="/practice" element={<PracticeRecord />} />
           <Route path="/subjects" element={<Subjects />} />
           <Route path="/subjects/:id" element={<SubjectDetail />} />
           <Route path="/chapters/:id" element={<ChapterDetail />} />
@@ -35,6 +41,8 @@ export default function App() {
           <Route path="/statistics" element={<Statistics />} />
           <Route path="/pdf-import" element={<PdfImport />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/review" element={<Review />} />
+          <Route path="/dedup" element={<DedupReview />} />
         </Routes>
       </Layout>
     </BrowserRouter>

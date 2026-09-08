@@ -91,6 +91,11 @@ class Question(BaseModel):
         description="The question text in LaTeX format. "
                     "Preserve the original OCR output exactly — do not modify or correct.",
     )
+    question_number: Optional[str] = Field(
+        None,
+        description="The question number shown in the PDF, e.g. '17'. "
+                    "Return null when no visible number exists.",
+    )
     question_type: QuestionType = Field(
         default=QuestionType.unknown,
         description="Question type classification.",

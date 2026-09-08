@@ -103,8 +103,14 @@ def _lastrowid(cur, conn=None):
 def _migrate(conn):
     """Add missing columns to existing tables (schema migration)."""
     migrations = [
+        ("knowledge_points", "parent_id", "INTEGER REFERENCES knowledge_points(id) ON DELETE SET NULL"),
         ("question_knowledge_points", "role", "TEXT DEFAULT 'primary'"),
         ("question_knowledge_points", "weight", "REAL DEFAULT 1.0"),
+        ("questions", "question_number", "TEXT"),
+        ("questions", "source_page", "INTEGER"),
+        ("questions", "source_pages", "TEXT"),
+        ("questions", "needs_review", "INTEGER DEFAULT 0"),
+        ("questions", "review_note", "TEXT"),
     ]
     for table, column, col_def in migrations:
         try:
@@ -176,6 +182,11 @@ def _init_sqlite(conn):
             content TEXT NOT NULL,
             answer TEXT,
             source TEXT,
+            question_number TEXT,
+            source_page INTEGER,
+            source_pages TEXT,
+            needs_review INTEGER DEFAULT 0,
+            review_note TEXT,
             mastery_level INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -257,6 +268,11 @@ def _init_postgres(conn):
             content TEXT NOT NULL,
             answer TEXT,
             source TEXT,
+            question_number TEXT,
+            source_page INTEGER,
+            source_pages TEXT,
+            needs_review INTEGER DEFAULT 0,
+            review_note TEXT,
             mastery_level INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

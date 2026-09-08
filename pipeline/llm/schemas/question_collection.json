@@ -13,6 +13,12 @@
               "type": "string",
               "minLength": 1
             },
+            "question_number": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "question_type": {
               "type": "string",
               "enum": [

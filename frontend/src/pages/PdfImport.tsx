@@ -13,6 +13,9 @@ const STEP_LABELS: Record<string, string> = {
   ocr_repair: 'OCR 修复',
   enrich: 'AI 知识点提取',
   merge: '合并结果',
+  visual_recovery: '视觉复判',
+  page_enrich: '本页知识点提取',
+  page_import: '本页录入题库',
 };
 
 function formatElapsed(sec: number): string {
@@ -28,14 +31,12 @@ function renderLatex(text: string): string {
   const esc = (t: string) =>
     t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  // Split into math and text segments (process $$ first)
   const parts: string[] = [];
   let remaining = text;
   const re = /\$\$(.+?)\$\$|\$(.+?)\$/g;
   let lastIdx = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(remaining)) !== null) {
-    // Text before this match
     if (m.index > lastIdx) parts.push(esc(remaining.slice(lastIdx, m.index)));
     const tex = decodeURIComponent(m[1] ?? m[2]);
     const display = m[1] !== undefined;
@@ -50,11 +51,12 @@ function renderLatex(text: string): string {
   return parts.join('');
 }
 
-// ── Upload Phase ───────────────────────────────────────────
+// ── Upload Phase ─────────────────────────────────────────────
 
-function UploadPhase({ onStart }: { onStart: (file: File) => void }) {
+function UploadPhase({ onStart }: { onStart: (file: File, autoImport: boolean) => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [autoImport, setAutoImport] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleDrop = (e: React.DragEvent) => {
@@ -96,10 +98,23 @@ function UploadPhase({ onStart }: { onStart: (file: File) => void }) {
           )}
         </div>
 
+        <div className="form-check mb-3">
+          <input
+            className="form-check-input"
+            type="checkbox"
+            id="autoImport"
+            checked={autoImport}
+            onChange={e => setAutoImport(e.target.checked)}
+          />
+          <label className="form-check-label" htmlFor="autoImport">
+            逐页处理并自动录入题库
+          </label>
+        </div>
+
         <button
           className="btn btn-primary"
           disabled={!file}
-          onClick={() => file && onStart(file)}
+          onClick={() => file && onStart(file, autoImport)}
         >
           <i className="bi bi-play"></i> 开始导入
         </button>
@@ -108,7 +123,7 @@ function UploadPhase({ onStart }: { onStart: (file: File) => void }) {
   );
 }
 
-// ── Progress Phase ─────────────────────────────────────────
+// ── Progress Phase ────────────────────────────────────────────
 
 function ProgressPhase({ task, onFailed }: { task: ImportTask; onFailed: () => void }) {
   const label = STEP_LABELS[task.current_step] || task.current_step;
@@ -153,24 +168,138 @@ function ProgressPhase({ task, onFailed }: { task: ImportTask; onFailed: () => v
   );
 }
 
-// ── Result Phase ───────────────────────────────────────────
+// ── Source Input Component ────────────────────────────────────
 
-function ResultPhase({ taskId, onBack }: { taskId: string; onBack: () => void }) {
+function SourceInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [sources, setSources] = useState<string[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.sources().then(d => setSources(d as string[])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="input-group" ref={dropdownRef}>
+      <input
+        type="text"
+        className="form-control"
+        placeholder="例如：2024年真题、教材第一章"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+      {sources.length > 0 && (
+        <button
+          className="btn btn-outline-secondary dropdown-toggle"
+          type="button"
+          onClick={() => setShowDropdown(!showDropdown)}
+        >
+          <i className="bi bi-clock-history"></i>
+        </button>
+      )}
+      {showDropdown && sources.length > 0 && (
+        <ul className="dropdown-menu dropdown-menu-end show" style={{ position: 'absolute', zIndex: 1050 }}>
+          <li><h6 className="dropdown-header">历史来源</h6></li>
+          {sources.map(s => (
+            <li key={s}>
+              <button className="dropdown-item" onClick={() => { onChange(s); setShowDropdown(false); }}>
+                {s}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ── Result Phase ──────────────────────────────────────────────
+
+function ResultPhase({ taskId, autoImport, onBack }: { taskId: string; autoImport: boolean; onBack: () => void }) {
   const [questions, setQuestions] = useState<PdfImportQuestion[]>([]);
   const [idx, setIdx] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const [source, setSource] = useState('');
 
   useEffect(() => {
     api.getTaskResult(taskId)
-      .then(data => setQuestions((data.questions as PdfImportQuestion[]) || []))
+      .then(data => {
+        const qs = (data.questions as PdfImportQuestion[]) || [];
+        setQuestions(qs);
+        // Pre-fill source from first question if available
+        if (qs.length > 0 && qs[0].source) {
+          setSource(qs[0].source);
+        }
+      })
       .catch(e => setError((e as Error).message))
       .finally(() => setLoading(false));
   }, [taskId]);
 
+  const handleImport = async () => {
+    setImporting(true);
+    try {
+      const data = await api.getTaskResult(taskId);
+      // Apply source to all questions
+      if (source && data.questions) {
+        (data.questions as PdfImportQuestion[]).forEach(q => { q.source = source; });
+      }
+      const result = await api.importFromTask(data as Record<string, unknown>);
+      setImportResult(result.message || '导入成功');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   if (loading) return <div className="text-center p-5"><span className="spinner-border" /></div>;
   if (error) return <div className="alert alert-danger">{error}</div>;
   if (!questions.length) return <div className="alert alert-warning">没有提取到题目。</div>;
+
+  if (autoImport) {
+    return (
+      <div className="card">
+        <div className="card-body text-center py-5">
+          <i className="bi bi-check-circle text-success fs-1"></i>
+          <h5 className="mt-3">已按页自动录入 {questions.length} 道题</h5>
+          <p className="text-muted">每页题目完成知识点提取和复判后已写入题库</p>
+          <div className="d-flex gap-2 justify-content-center">
+            <button className="btn btn-primary" onClick={onBack}>继续导入</button>
+            <a href="/questions" className="btn btn-outline-primary">查看题目列表</a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (importResult) {
+    return (
+      <div className="card">
+        <div className="card-body text-center py-5">
+          <i className="bi bi-check-circle text-success fs-1"></i>
+          <h5 className="mt-3">{importResult}</h5>
+          <p className="text-muted">题目已成功导入到题库中</p>
+          <div className="d-flex gap-2 justify-content-center">
+            <button className="btn btn-primary" onClick={onBack}>继续导入</button>
+            <a href="/questions" className="btn btn-outline-primary">查看题目列表</a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const q = questions[idx];
 
@@ -182,6 +311,15 @@ function ResultPhase({ taskId, onBack }: { taskId: string; onBack: () => void })
           <button className="btn btn-outline-secondary btn-sm" onClick={onBack}>
             <i className="bi bi-arrow-left"></i> 重新导入
           </button>
+        </div>
+
+        {/* Source input */}
+        <div className="mb-3">
+          <label className="form-label fw-bold">
+            <i className="bi bi-tag"></i> 来源
+            <small className="text-muted fw-normal ms-2">所有题目共用此来源</small>
+          </label>
+          <SourceInput value={source} onChange={setSource} />
         </div>
 
         <div className="border rounded p-3 mb-3">
@@ -202,10 +340,18 @@ function ResultPhase({ taskId, onBack }: { taskId: string; onBack: () => void })
             </span>
           ))}
 
-          {q.source && <p className="text-muted mt-2 mb-0"><small>来源: {q.source}</small></p>}
+          {q.source && (
+            <p className="text-muted mt-2 mb-0">
+              <small>
+                来源: {q.source}
+                {q.source_page ? `，第 ${q.source_page} 页` : ''}
+                {q.needs_review ? <span className="badge bg-warning text-dark ms-2">待复核</span> : null}
+              </small>
+            </p>
+          )}
         </div>
 
-        <div className="d-flex justify-content-between">
+        <div className="d-flex justify-content-between mb-3">
           <button className="btn btn-outline-primary" disabled={idx === 0} onClick={() => setIdx(idx - 1)}>
             <i className="bi bi-chevron-left"></i> 上一题
           </button>
@@ -214,12 +360,23 @@ function ResultPhase({ taskId, onBack }: { taskId: string; onBack: () => void })
             下一题 <i className="bi bi-chevron-right"></i>
           </button>
         </div>
+
+        <hr />
+        <div className="text-center">
+          <button className="btn btn-success btn-lg" onClick={handleImport} disabled={importing}>
+            {importing ? (
+              <><span className="spinner-border spinner-border-sm me-2"></span>导入中...</>
+            ) : (
+              <><i className="bi bi-download me-2"></i>导入全部 {questions.length} 题到题库</>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Main Component ─────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────
 
 type Phase = 'upload' | 'pending' | 'running' | 'result';
 
@@ -227,6 +384,7 @@ export default function PdfImport() {
   const [phase, setPhase] = useState<Phase>('upload');
   const [task, setTask] = useState<ImportTask | null>(null);
   const [taskId, setTaskId] = useState('');
+  const [autoImport, setAutoImport] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -257,9 +415,10 @@ export default function PdfImport() {
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  const handleStart = async (file: File) => {
+  const handleStart = async (file: File, useAutoImport: boolean) => {
     try {
-      const result = await api.pdfImport(file);
+      setAutoImport(useAutoImport);
+      const result = await api.pdfImport(file, undefined, useAutoImport);
       setTaskId(result.task_id);
       setPhase('pending');
       pollTask(result.task_id);
@@ -281,7 +440,7 @@ export default function PdfImport() {
 
       {phase === 'upload' && <UploadPhase onStart={handleStart} />}
       {(phase === 'pending' || phase === 'running') && task && <ProgressPhase task={task} onFailed={handleBack} />}
-      {phase === 'result' && <ResultPhase taskId={taskId} onBack={handleBack} />}
+      {phase === 'result' && <ResultPhase taskId={taskId} autoImport={autoImport} onBack={handleBack} />}
     </>
   );
 }

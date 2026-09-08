@@ -1,3 +1,4 @@
+import type { DedupGroup } from './types';
 ﻿const BASE = '';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -53,6 +54,25 @@ export const api = {
     request('/api/kps/move', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kp_id: kpId, new_parent_id: newParentId }) }),
   mergeKP: (sourceId: number, targetId: number) =>
     request('/api/kps/merge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_id: sourceId, target_id: targetId }) }),
+  // ── Task Import ──────────────────────────────────────────
+  importFromTask: (data: Record<string, unknown>) =>
+    request<{ message?: string }>('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  // ── Exams ────────────────────────────────────────────────
+  exams: () => request<unknown[]>('/api/exams'),
+  addExam: (name: string) =>
+    request('/api/exams', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }),
+  examDetail: (id: number) => request<Record<string, unknown>>(`/api/exams/${id}`),
+  deleteExam: (id: number) => request(`/api/exams/${id}`, { method: 'DELETE' }),
+  examAddSubject: (examId: number, subjectId: number) =>
+    request(`/api/exams/${examId}/subjects`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject_id: subjectId }) }),
+  examRemoveSubject: (examId: number, subjectId: number) =>
+    request(`/api/exams/${examId}/subjects/${subjectId}`, { method: 'DELETE' }),
+  // ── Sources ──────────────────────────────────────────────
+  sources: () => request<string[]>('/api/sources'),
+  // ── KP Deduplication ─────────────────────────────────────
+  dedupRun: () => request<{ task_id: string; status: string }>('/api/kps/dedup', { method: 'POST' }),
+  dedupStatus: (taskId: string) => request<{ status: string; groups: DedupGroup[]; error?: string }>(`/api/kps/dedup/${taskId}`),
+  dedupApply: (groups: DedupGroup[]) => request<{ message: string; applied: number }>('/api/kps/dedup/apply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ groups }) }),
   questions: (params: Record<string, string | number | undefined | null> = {}) =>
     request<Record<string, unknown>>(`/api/questions${qs(params)}`),
   addQuestion: (data: Record<string, unknown>) =>
@@ -63,6 +83,12 @@ export const api = {
   editQuestion: (id: number, data: Record<string, unknown>) =>
     request(`/api/questions/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   deleteQuestion: (id: number) => request(`/api/questions/${id}`, { method: 'DELETE' }),
+  batchDeleteQuestions: (ids: number[]) =>
+    request<{ message?: string; deleted: number }>('/api/questions/batch-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) }),
+  batchUpdateMastery: (ids: number[], level: number) =>
+    request<{ message?: string; updated: number }>('/api/questions/batch-mastery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, level }) }),
+  batchUpdateSource: (ids: number[], source: string) =>
+    request<{ message?: string; updated: number }>('/api/questions/batch-source', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, source }) }),
   updateMastery: (id: number, level: number) =>
     request(`/api/questions/${id}/mastery`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level }) }),
   reviewData: (id: number) => request<Record<string, unknown>>(`/api/questions/${id}/review`),
@@ -72,6 +98,16 @@ export const api = {
     request('/api/analyze-question', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   analyze: (data: Record<string, unknown>) =>
     request('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  // ?? Review / Recommend ?????????????????????????????????????
+  getRecommend: (limit?: number, subjectId?: number) => {
+    const params = new URLSearchParams();
+    if (limit) params.set('limit', String(limit));
+    if (subjectId) params.set('subject_id', String(subjectId));
+    const qs = params.toString();
+    return request(`/api/recommend${qs ? '?' + qs : ''}`);
+  },
+  setMastery: (id: number, level: number) =>
+    request(`/api/questions/${id}/mastery`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level }) }),
   statistics: () => request<Record<string, unknown>>('/api/statistics'),
   // Settings
   getSettings: () => request<Record<string, string>>('/api/settings'),
@@ -79,6 +115,8 @@ export const api = {
     request('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   testSettings: () => request<{ success: boolean; message?: string; error?: string }>('/api/settings/test', { method: 'POST' }),
   exportUrl: '/api/export',
+  exportDownload: (subjectId?: number, chapterId?: number) =>
+    `/api/export${qs({ subject_id: subjectId, chapter_id: chapterId })}`,
   importFile: async (file: File) => {
     const fd = new FormData();
     fd.append('file', file);
@@ -87,10 +125,11 @@ export const api = {
     return res.json();
   },
   // ── PDF Import Tasks ─────────────────────────────────────
-  pdfImport: async (file: File, subjects?: string) => {
+  pdfImport: async (file: File, subjects?: string, autoImport: boolean = true) => {
     const fd = new FormData();
     fd.append('file', file);
     if (subjects) fd.append('subjects', subjects);
+    fd.append('auto_import', autoImport ? '1' : '0');
     const res = await fetch('/api/pdf/import', { method: 'POST', body: fd });
     if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.error || `HTTP ${res.status}`); }
     return res.json() as Promise<{ task_id: string; status: string }>;

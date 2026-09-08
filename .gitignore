@@ -35,4 +35,6 @@ _*.py
 
 # Node
 pnpm-lock.yaml
+.pnpm-store/
 data/mineru-output/
+Bank/

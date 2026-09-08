@@ -17,13 +17,16 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from pipeline.llm.models import QuestionCollection
 from pipeline.llm.llm_client import LLMClient, LLMConfig
 from pipeline.llm.prompt import get_system_prompt, build_combined_prompt
-from pipeline.llm.validator import extract_and_validate_with_retry
+from pipeline.llm.validator import extract_and_validate, extract_and_validate_with_retry
 from pipeline.llm.schemas import load_schema
 
 logger = logging.getLogger(__name__)
@@ -35,6 +38,105 @@ DEFAULT_CONFIG = LLMConfig(
     max_tokens=4000,
     timeout=120,
 )
+
+
+class _VisualQuestionExtraction(BaseModel):
+    content: str = Field(..., min_length=1, description="Complete question text in LaTeX.")
+    question_number: str | None = Field(
+        None,
+        description="Question number shown in the PDF page, or null when invisible.",
+    )
+
+
+VISUAL_RECOVERY_SYSTEM_PROMPT = """你是考研数学题复核助手。
+原 PDF 页面图片中有一道题，OCR 得到的题干缺失或不完整。
+请只看这张页面图片，把这道题的完整题干转写为 LaTeX 格式。
+只返回 JSON，不要 Markdown，不要解释，不要补写答案：
+{"content": "完整题目内容", "question_number": "题号或 null"}"""
+
+
+def _is_question_content_complete(text: str) -> bool:
+    """Minimal completeness check: content exists and is not just a label."""
+    content = (text or "").strip()
+    if not content:
+        return False
+    if len(content) < 8:
+        return False
+    if re.fullmatch(r"(?:第\s*)?\d{1,4}\s*[\.．、]?\s*(?:题)?", content):
+        return False
+    return True
+
+
+def _extract_question_number(text: str) -> str | None:
+    """Extract the leading question number from extracted text when visible."""
+    content = (text or "").strip().lstrip("\ufeff")
+    match = re.match(r"^(?:第\s*)?(\d{1,4})\s*[\.、．)）]?", content)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _page_data_urls(pdf_path: Path, pages: list[int], scale: float = 1.5) -> list[str]:
+    """Render PDF pages to JPEG data URLs for vision-capable LLM routes."""
+    import base64
+    import io
+
+    import pypdfium2 as pdfium
+
+    urls: list[str] = []
+    with pdfium.PdfDocument(pdf_path) as document:
+        for page_number in pages:
+            if page_number < 1 or page_number > len(document):
+                continue
+            image = document[page_number - 1].render(scale=scale).to_pil()
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=88)
+            encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+            urls.append(f"data:image/jpeg;base64,{encoded}")
+    return urls
+
+
+def _recover_question_with_vision(
+    question_data: dict[str, Any],
+    client: LLMClient,
+    pdf_path: Path,
+) -> tuple[str, str | None]:
+    """Re-extract an incomplete question from its original PDF page image."""
+    pages = [
+        int(p)
+        for p in (question_data.get("source_pages") or [])
+        if str(p).strip().isdigit()
+    ]
+    if not pages:
+        raise ValueError("题目缺少来源页码，无法进行视觉复判")
+
+    image_urls = _page_data_urls(pdf_path, pages)
+    if not image_urls:
+        raise ValueError(f"无法渲染 PDF 页面：{', '.join(str(p) for p in pages)}")
+
+    user_content: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": (
+                f"题目位于 PDF 第 {', '.join(str(p) for p in pages)} 页。"
+                "请根据页面图片复现该题的完整题干。"
+            ),
+        }
+    ]
+    for url in image_urls:
+        user_content.append({"type": "image_url", "image_url": {"url": url}})
+    user_content.append({"type": "text", "text": "返回 JSON 格式的完整题干。"})
+
+    response = client.chat(
+        system=VISUAL_RECOVERY_SYSTEM_PROMPT,
+        user=user_content,
+        max_tokens=min(client.config.max_tokens, 8192),
+    )
+    parsed = extract_and_validate(response, _VisualQuestionExtraction)
+    content = parsed.content.strip()
+    if not content:
+        raise ValueError("视觉复判返回空题干")
+    return content, parsed.question_number
 
 
 def _build_single_question_prompt(question_data: dict[str, Any]) -> str:
@@ -56,6 +158,8 @@ def _build_single_question_prompt(question_data: dict[str, Any]) -> str:
         f"Question{num}{page_str}:\n"
         f"Type hint: {q['detection'].get('method', 'unknown')}\n"
         f"Text: {text}\n\n"
+        f"If the PDF shows a question number for this question, include it as "
+        f"question_number; otherwise use null.\n\n"
         f"Return the JSON now."
     )
 
@@ -65,6 +169,7 @@ def enrich_single(
     client: LLMClient,
     existing_kps: str = "",
     force: bool = False,
+    pdf_path: Path | None = None,
 ) -> Path:
     """Enrich a single question file.
 
@@ -86,6 +191,47 @@ def enrich_single(
 
     # Load question data
     question_data = json.loads(question_path.read_text(encoding="utf-8"))
+
+    # Re-check incomplete OCR through the original page image before enriching.
+    source_text = question_data.get("repaired_text") or question_data.get("stem_text", "")
+    visual_retry: dict[str, Any] = {}
+    needs_review = False
+    review_note = ""
+    if not _is_question_content_complete(source_text):
+        if pdf_path is not None:
+            pages = [
+                int(p)
+                for p in (question_data.get("source_pages") or [])
+                if str(p).strip().isdigit()
+            ]
+            try:
+                visual_text, visual_question_number = _recover_question_with_vision(
+                    question_data, client, pdf_path
+                )
+                question_data["repaired_text"] = visual_text
+                visual_retry = {
+                    "status": "recovered",
+                    "pages": pages,
+                    "content": visual_text,
+                    "question_number": visual_question_number,
+                }
+                logger.info(
+                    "Visual recovery succeeded for %s (%s)",
+                    question_path.name,
+                    pages,
+                )
+            except Exception as e:
+                visual_retry = {
+                    "status": "failed",
+                    "pages": pages,
+                    "error": str(e)[:300],
+                }
+                needs_review = True
+                review_note = f"视觉复判失败：{e}"
+                logger.warning("Visual recovery failed for %s: %s", question_path.name, e)
+        else:
+            needs_review = True
+            review_note = "题干不完整且未提供原 PDF，无法视觉复判"
 
     # Build prompts
     system_prompt = get_system_prompt(mode="combined")
@@ -113,6 +259,24 @@ def enrich_single(
         raise ValueError(f"LLM returned no questions for {question_path.name}")
 
     enriched_question = result.questions[0]
+    source_pages = [
+        int(p) for p in (question_data.get("source_pages") or [])
+        if str(p).strip().isdigit()
+    ]
+    source_page = enriched_question.source_page or (source_pages[0] if source_pages else None)
+    detected_number = question_data.get("detection", {}).get("detected_number")
+    visual_question_number = (
+        visual_retry.get("question_number")
+        if visual_retry.get("status") == "recovered"
+        else None
+    )
+    question_number = (
+        enriched_question.question_number
+        or visual_question_number
+        or _extract_question_number(source_text)
+        or detected_number
+        or str((question_data.get("question_index", 0) or 0) + 1)
+    )
 
     # Build enriched data
     enriched_data = {
@@ -129,9 +293,19 @@ def enrich_single(
                 }
                 for kp in enriched_question.knowledge_points
             ],
-            "source_page": enriched_question.source_page,
+            "source_page": source_page,
+            "source_pages": source_pages,
+            "question_number": question_number,
+            "needs_review": needs_review,
+            "review_note": review_note,
+            "visual_retry": visual_retry,
         },
         "content": enriched_question.content,
+        "source_page": source_page,
+        "source_pages": source_pages,
+        "question_number": question_number,
+        "needs_review": needs_review,
+        "review_note": review_note,
     }
 
     # Write enriched file
@@ -149,6 +323,7 @@ def enrich_all(
     existing_kps: str = "",
     force: bool = False,
     progress_callback: Any | None = None,
+    pdf_path: Path | str | None = None,
 ) -> list[Path]:
     """Enrich all question files in a directory.
 
@@ -162,12 +337,18 @@ def enrich_all(
         List of paths to enriched files
     """
     questions_dir = Path(questions_dir)
+    pdf_path = Path(pdf_path) if pdf_path else None
     config = config or DEFAULT_CONFIG
     client = LLMClient(config)
 
     # Find all question files (not enriched ones)
     question_files = sorted(questions_dir.glob("question_*.json"))
-    question_files = [f for f in question_files if ".enriched." not in f.name and ".repaired." not in f.name]
+    question_files = [
+        f for f in question_files
+        if ".enriched." not in f.name
+        and ".repaired." not in f.name
+        and ".error." not in f.name
+    ]
 
     if not question_files:
         logger.warning(f"No question files found in {questions_dir}")
@@ -185,7 +366,13 @@ def enrich_all(
 
     for i, qpath in enumerate(question_files, 1):
         try:
-            epath = enrich_single(qpath, client, existing_kps, force=force)
+            epath = enrich_single(
+                qpath,
+                client,
+                existing_kps,
+                force=force,
+                pdf_path=pdf_path,
+            )
             enriched_files.append(epath)
 
 

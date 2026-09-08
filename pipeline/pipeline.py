@@ -98,7 +98,7 @@ class Pipeline:
         self,
         pdf_path: str | Path,
         output_base: str | Path,
-        mineru_cmd: str = "mineru",
+        mineru_cmd: str | list[str] = "mineru",
         llm_config: LLMConfig | None = None,
         db_path: str = "data/grad.db",
         subjects: list[str] | None = None,
@@ -208,7 +208,7 @@ class Pipeline:
 
         # First attempt: default settings
         cmd = [
-            self.mineru_cmd,
+            *(self.mineru_cmd if isinstance(self.mineru_cmd, list) else [self.mineru_cmd]),
             "-p", str(self.pdf_path),
             "-o", str(self.raw_dir),
             "-b", "pipeline",
@@ -450,6 +450,7 @@ class Pipeline:
             config=config,
             existing_kps=existing_kps,
             progress_callback=self._report,
+            pdf_path=self.pdf_path,
         )
 
         self.state.enriched_count = len(enriched_files)

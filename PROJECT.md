@@ -28,9 +28,9 @@
 | 前端 | React 19 + Vite + TypeScript | SPA 架构，Bootstrap 5 UI |
 | 数据库 | SQLite | 单文件数据库 `data/grad.db` |
 | 数学公式 | KaTeX | LaTeX 实时预览 |
-| AI | DeepSeek / MiMo / OpenAI | 题目分析、知识点提取 |
+| AI | DeepSeek / MiMo / OpenAI | 题目分析、知识点提取；设置页切换本地 LM Studio 与在线 API |
 | PDF 提取 | MinerU 3.4.2 | pipeline backend |
-| LLM | Qwen 3.5 9B via LM Studio | 结构化输出，Pydantic 校验 |
+| LLM | LM Studio 本地 / DeepSeek `deepseek-v4-flash` chat | 结构化输出，Pydantic 校验；题目缺失时自动视觉复判 |
 
 ---
 
@@ -114,8 +114,11 @@ questions/question_0001.json ...
 questions/question_0001.repaired.json ...
  ↓ pipeline/enricher.py (逐题 LLM，断点恢复)
 questions/question_0001.enriched.json ...
+ （若题干不完整：渲染原 PDF 页面图片 → 当前 LLM 路线视觉复判）
  ↓ pipeline/merger.py
 import_ready.json → /api/import → 题库数据库
+
+PDF 导入默认按页处理：每页题目完成知识点提取和视觉复判后，标好题号并立即写入数据库，再处理下一页。
 ```
 
 ### 设计原则
@@ -140,6 +143,8 @@ question_tags (question_id, tag_id)
 settings (key, value)
 ```
 
+题目表当前还包含：`question_number`、`source_page`、`source_pages`、`needs_review`、`review_note`。
+
 ---
 
 ## API 端点
@@ -150,10 +155,12 @@ settings (key, value)
 | `/api/subjects/<id>/chapters` | POST | 添加章节 |
 | `/api/chapters/<id>/kps` | POST | 添加知识点 |
 | `/api/questions` | GET/POST | 题目列表 / 添加题目 |
+| `/api/questions/batch-delete` | POST | 批量删除题目 |
+| `/api/questions/batch-source` | POST | 批量修改来源 |
 | `/api/questions/<id>/mastery` | POST | 标记掌握度 |
 | `/api/analyze-question` | POST | AI 分析题目 |
 | `/api/statistics` | GET | 统计数据 |
-| `/api/export` | GET | 导出题库 |
+| `/api/export` | GET | 导出题库；支持 `subject_id` / `chapter_id` 范围过滤 |
 | `/api/import` | POST | 导入题库 |
 | `/api/settings` | GET/POST | AI 设置 |
 | `/api/knowledge-tree` | GET | 获取知识点树（支持 subject_id/chapter_id 过滤） |
@@ -165,6 +172,8 @@ settings (key, value)
 | `/api/tasks` | GET | 列出所有任务 |
 | `/api/tasks/<id>` | GET | 查询任务状态/进度 |
 | `/api/tasks/<id>/result` | GET | 获取任务结果 |
+
+另外 `GET /api/questions` 支持 `search=题号`、`sort=question_number_asc|desc`、`subject_id`、`chapter_id`、`mastery`、`source` 等筛选参数。
 
 ---
 
@@ -180,9 +189,21 @@ settings (key, value)
 | v2.2.0 | 2026-07-10 | PDF 流水线（MinerU + 规则引擎 + LLM 结构化输出） |
 | v2.3.0 | 2026-07-10 | LLM 分割器 + OCR 修复层 + LaTeX 修复 + JSON 结构化输出 + 进度追踪 |
 | v2.4.0 | 2026-07-10 | 知识点树（父子关系、合并、移动）+ 数据库迁移 |
+| v2.8.0 | 2026-08-18 | 五档做题感受、薄弱统计、页码与视觉复判、逐页自动导入 |
+| v2.9.0 | 2026-09-08 | 题目列表/做题记录页重构、题号搜索排序、批量管理、范围导出、LaTeX 详情渲染 |
 
 ---
+
+## 当前验收
+
+- `p17-37.pdf` 逐页流水线恢复并导入 62 道题（0 跳过），每题保留来源页码与题号。
+- 知识点只匹配知识点管理中的已有条目；题干不完整时自动把原 PDF 页面图片交给当前 LLM 路线视觉复判，失败则标记“待复核”。
+- 做题记录页支持五档掌握度标记、左键拖选与右键拖取消；题目列表支持批量改来源/删除、按题号搜索排序和 KaTeX 渲染。
+- 导出支持全部 / 按学科 / 按章节，且只包含范围内的知识点与题目。
 
 ## 已知问题
 1. **Flask secret_key** — 未配置时 session 不持久
 2. **Turbomind/Blackwell** — lmdeploy 加速不可用，MinerU 使用 `-b pipeline`
+3. **前端构建** — 需使用 Node.js；本机可从 Codex runtime 的 `dependencies/node/bin` 引入后执行 `pnpm build`
+4. **PDF 流水线** — 需要本地 MinerU 和 DeepSeek API 可用
+5. **视觉复判** — 依赖当前 LLM 路线的多模态能力；在线 API 不支持图片时，不完整题目会标记“待复核”而不是自动换模型

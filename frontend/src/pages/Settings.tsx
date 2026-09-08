@@ -11,7 +11,8 @@ interface Settings {
 }
 
 const PROVIDERS = [
-  { id: 'deepseek', name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', models: ['deepseek-chat', 'deepseek-reasoner'] },
+  { id: 'local', name: '本地部署', url: 'http://127.0.0.1:1234/v1/chat/completions', models: ['qwen/qwen3.5-9b'], noKey: true },
+  { id: 'deepseek', name: 'DeepSeek API', url: 'https://api.deepseek.com/chat/completions', models: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash'] },
   { id: 'mimo', name: '小米 MiMo', url: 'https://api.xiaomimimo.com/v1/chat/completions', models: ['mimo-v2.5'] },
   { id: 'openai', name: 'OpenAI', url: 'https://api.openai.com/v1/chat/completions', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
   { id: 'custom', name: '自定义', url: '', models: [] },
@@ -31,13 +32,12 @@ export default function Settings() {
     api.getSettings().then(d => {
       const raw = d as unknown as Record<string, string>;
       const provider = raw.ai_provider || 'deepseek';
-      const providerKey = (raw as any)[`api_key_${provider}`] || '';
       setSettings({
         ai_provider: provider,
-        api_key: providerKey,
+        api_key: '',
         api_url: raw.api_url || '',
         ai_model: raw.ai_model || 'deepseek-chat',
-        has_api_key: !!providerKey,
+        has_api_key: !!((raw as any).provider_keys || {})[provider],
         provider_keys: (raw as any).provider_keys,
       });
     });
@@ -50,14 +50,13 @@ export default function Settings() {
     try {
       const d = await api.getSettings() as unknown as Record<string, string>;
       // Load provider-specific key from db (api_key_deepseek, api_key_mimo, etc.)
-      const providerKey = (d as any)[`api_key_${id}`] || '';
       setSettings({
         ...(d as unknown as Settings),
         ai_provider: id,
         api_url: p?.url || d.api_url || '',
         ai_model: p?.models[0] || d.ai_model || '',
-        api_key: providerKey,  // Show saved key for this provider
-        has_api_key: !!providerKey,
+        api_key: '',
+        has_api_key: !!((d as any).provider_keys || {})[id],
       });
     } catch {
       if (p) {
@@ -139,7 +138,7 @@ export default function Settings() {
                 </div>
               </div>
 
-              <div className="mb-3">
+              {!provider.noKey && <div className="mb-3">
                 <label className="form-label fw-bold">API Key <span className="text-danger">*</span></label>
                 <div className="input-group">
                   <input type={showKey ? 'text' : 'password'}
@@ -162,7 +161,7 @@ export default function Settings() {
                     <>前往 <a href="https://platform.xiaomimimo.com/#/console/api-keys" target="_blank" rel="noreferrer">platform.xiaomimimo.com</a> 获取 API Key</>
                   )}
                 </div>
-              </div>
+              </div>}
 
               <div className="mb-3">
                 <label className="form-label fw-bold">模型</label>

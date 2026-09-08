@@ -13,6 +13,7 @@ export default function EditQuestion() {
   const [content, setContent] = useState('');
   const [answer, setAnswer] = useState('');
   const [source, setSource] = useState('');
+  const [questionNumber, setQuestionNumber] = useState('');
 
   useEffect(() => {
     api.subjects().then(d => setSubjects(d as Subject[]));
@@ -23,13 +24,14 @@ export default function EditQuestion() {
       setContent(q.content);
       setAnswer(q.answer || '');
       setSource(q.source || '');
+      setQuestionNumber(q.question_number || '');
     });
   }, [qId]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
-    await api.editQuestion(qId, { subject_id: Number(subjectId), content, answer, source });
+    await api.editQuestion(qId, { subject_id: Number(subjectId), content, answer, source, question_number: questionNumber });
     navigate(`/questions/${qId}`);
   };
 
@@ -64,6 +66,10 @@ export default function EditQuestion() {
             <div className="mb-3">
               <label className="form-label">来源</label>
               <input type="text" className="form-control" value={source} onChange={e => setSource(e.target.value)} />
+            </div>
+            <div className="mb-3">
+              <label className="form-label">题号</label>
+              <input type="text" className="form-control" value={questionNumber} onChange={e => setQuestionNumber(e.target.value)} />
             </div>
             <div className="d-flex gap-2">
               <button type="submit" className="btn btn-primary"><i className="bi bi-check-circle"></i> 保存修改</button>

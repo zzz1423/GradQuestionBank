@@ -38,6 +38,11 @@ export interface Question {
   content: string;
   answer?: string;
   source?: string;
+  question_number?: string;
+  source_page?: number;
+  source_pages?: number[];
+  needs_review?: number;
+  review_note?: string;
   mastery_level: number;
   created_at: string;
   updated_at: string;
@@ -51,6 +56,7 @@ export interface WeakPoint {
   name: string;
   chapter_name: string;
   subject_name: string;
+  exam_name: string;
   total: number;
   weakness_score: number;
   mastery_rate: number;
@@ -83,10 +89,10 @@ export interface ReviewData {
 }
 
 export const MASTERY_LABELS: Record<number, string> = {
-  0: '未标记', 1: '完全不会', 2: '模糊', 3: '已掌握',
+  0: '未标记', 1: '知识盲区', 2: '只做了开头', 3: '易错细节', 4: '独立完成', 5: '轻松秒杀',
 };
 export const MASTERY_COLORS: Record<number, string> = {
-  0: 'secondary', 1: 'danger', 2: 'warning', 3: 'success',
+  0: 'secondary', 1: 'danger', 2: 'danger', 3: 'warning', 4: 'success', 5: 'success',
 };
 
 // ── PDF Import Task ────────────────────────────────────────
@@ -108,10 +114,23 @@ export interface ImportTask {
   created_at: string;
 }
 
+export interface DedupGroup {
+  canonical: string;
+  duplicates: string[];
+  reason: string;
+  subject?: string;
+  accepted?: boolean;
+}
+
 export interface PdfImportQuestion {
   subject_name: string;
   content: string;
   source: string;
+  question_number?: string;
+  source_page?: number;
+  source_pages?: number[];
+  needs_review?: boolean | number;
+  review_note?: string;
   knowledge_points: {
     name: string;
     chapter: string;

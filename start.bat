@@ -4,6 +4,14 @@ title GradQuestionBank
 
 cd /d "%~dp0"
 
+set "VENV_PYTHON=%~dp0.venv\Scripts\python.exe"
+if not exist "%VENV_PYTHON%" (
+    echo [ERROR] Python virtual environment not found: %VENV_PYTHON%
+    echo Please create it first: python -m venv .venv
+    pause
+    exit /b 1
+)
+
 echo ============================================
 echo   GradQuestionBank
 echo ============================================
@@ -11,7 +19,7 @@ echo.
 
 :: Flask backend
 echo [1/2] Backend (Flask :5000)...
-start "GradQuestionBank - Backend" /D "%~dp0" cmd /k "call .venv\Scripts\activate.bat && python app.py"
+start "GradQuestionBank - Backend" /D "%~dp0" cmd /k ""%VENV_PYTHON%" "%~dp0app.py""
 
 timeout /t 2 /nobreak >nul
 

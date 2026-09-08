@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { MASTERY_LABELS, MASTERY_COLORS, type Question, type KnowledgePoint, type Tag } from '../types';
+import LatexContent from '../components/LatexContent';
 
 export default function QuestionDetail() {
   const { id } = useParams();
@@ -49,17 +50,27 @@ export default function QuestionDetail() {
             <div className="card-header d-flex justify-content-between align-items-center">
               <span>
                 <span className="badge bg-primary">{question.subject_name}</span>
-                {question.source && <span className="badge bg-light text-dark ms-1">{question.source}</span>}
+                {question.question_number && <span className="badge bg-info text-dark ms-1">题号 {question.question_number}</span>}
+                {question.source && (
+                  <span className="badge bg-light text-dark ms-1">
+                    {question.source}
+                    {question.source_page ? `，第 ${question.source_page} 页` : ''}
+                  </span>
+                )}
+                {question.needs_review ? <span className="badge bg-warning text-dark ms-1">待复核</span> : null}
               </span>
               <button className="btn btn-sm btn-outline-danger" onClick={deleteQuestion}>
                 <i className="bi bi-trash"></i> 删除
               </button>
             </div>
             <div className="card-body">
-              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>{question.content}</div>
+              <LatexContent text={question.content} />
             </div>
             {question.answer && (
-              <div className="card-footer"><strong>答案：</strong> {question.answer}</div>
+              <div className="card-footer">
+                <strong>答案：</strong>
+                <LatexContent text={question.answer} />
+              </div>
             )}
           </div>
 
@@ -103,13 +114,15 @@ export default function QuestionDetail() {
             <div className="card-body">
               <p className="text-muted small">你对这道题的掌握程度：</p>
               <div className="d-grid gap-2">
-                {[1, 2, 3].map(level => (
+                {[1, 2, 3, 4, 5].map(level => (
                   <button key={level}
                     className={`btn btn-${MASTERY_COLORS[level]} w-100 ${question.mastery_level === level ? 'active' : ''}`}
                     onClick={() => updateMastery(level)}>
                     {level === 1 && <i className="bi bi-x-circle"></i>}
                     {level === 2 && <i className="bi bi-question-circle"></i>}
                     {level === 3 && <i className="bi bi-check-circle"></i>}
+                    {level === 4 && <i className="bi bi-check-circle"></i>}
+                    {level === 5 && <i className="bi bi-lightning-charge"></i>}
                     {' '}{MASTERY_LABELS[level]}
                   </button>
                 ))}

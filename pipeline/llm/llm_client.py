@@ -27,9 +27,11 @@ class LLMConfig:
     """Configuration for an LLM API endpoint."""
     api_url: str = "http://127.0.0.1:1234/v1/chat/completions"
     model: str = "qwen/qwen3.5-9b"
+    api_key: str = ""
     temperature: float = 0.1
     max_tokens: int = 4000
     timeout: int = 120
+    supports_json_schema: bool = True
     json_schema: dict | None = None  # Pydantic model JSON schema for structured output
     extra_body: dict[str, Any] = field(default_factory=dict)
 
@@ -57,7 +59,7 @@ class LLMClient:
     def chat(
         self,
         system: str,
-        user: str,
+        user: Any,
         *,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -92,7 +94,7 @@ class LLMClient:
 
         # Use JSON schema mode for structured output (per-call override or config default)
         schema = json_schema or self.config.json_schema
-        if schema:
+        if schema and self.config.supports_json_schema:
             payload["response_format"] = {
                 "type": "json_schema",
                 "json_schema": schema,
@@ -103,13 +105,21 @@ class LLMClient:
             payload.update(self.config.extra_body)
 
         try:
+            headers = {"Content-Type": "application/json"}
+            if self.config.api_key:
+                headers["Authorization"] = f"Bearer {self.config.api_key}"
             req = urllib.request.Request(
                 self.config.api_url,
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers=headers,
             )
             resp = urllib.request.urlopen(req, timeout=self.config.timeout)
             data = json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")[:500]
+            raise RuntimeError(
+                f"LLM API HTTP {e.code} at {self.config.api_url}: {detail}"
+            ) from e
         except urllib.error.URLError as e:
             raise ConnectionError(
                 f"Cannot reach LLM API at {self.config.api_url}: {e}"

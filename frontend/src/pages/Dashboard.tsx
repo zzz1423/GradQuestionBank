@@ -44,8 +44,8 @@ export default function Dashboard() {
 
       <div className="row g-3 mb-4">
         <div className="col-md-4">
-          <Link to="/questions/add" className="btn btn-primary w-100 py-3">
-            <i className="bi bi-plus-circle fs-4"></i><br />录入新题目
+          <Link to="/practice" className="btn btn-primary w-100 py-3">
+            <i className="bi bi-journal-check fs-4"></i><br />添加做题记录
           </Link>
         </div>
         <div className="col-md-4">

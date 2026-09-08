@@ -16,6 +16,7 @@ export default function AddQuestion() {
   const [content, setContent] = useState('');
   const [answer, setAnswer] = useState('');
   const [source, setSource] = useState('');
+  const [questionNumber, setQuestionNumber] = useState('');
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [multiQuestions, setMultiQuestions] = useState<{content: string; answer: string; selected: boolean}[]>([]);
@@ -293,7 +294,7 @@ export default function AddQuestion() {
     if (toSave.length === 0) { alert('请至少选择一道题目'); return; }
     try {
       for (const q of toSave) {
-        await api.addQuestion({ subject_id: Number(subjectId), content: q.content, answer: q.answer, source });
+        await api.addQuestion({ subject_id: Number(subjectId), content: q.content, answer: q.answer, source, question_number: questionNumber });
       }
       navigate('/questions');
     } catch (e) {
@@ -311,7 +312,7 @@ export default function AddQuestion() {
     e.preventDefault();
     if (!content.trim()) { alert('题目内容不能为空'); return; }
     try {
-      const result = await api.addQuestion({ subject_id: Number(subjectId), content, answer, source }) as { id: number };
+      const result = await api.addQuestion({ subject_id: Number(subjectId), content, answer, source, question_number: questionNumber }) as { id: number };
       // Save knowledge points if any
       if (selectedKps.length > 0) {
         await api.saveReview(result.id, selectedKps);
@@ -352,6 +353,10 @@ export default function AddQuestion() {
           <div className="col-md-6">
             <label className="form-label">来源</label>
             <input type="text" className="form-control" placeholder="如：2024年真题" value={source} onChange={e => setSource(e.target.value)} />
+          </div>
+          <div className="col-md-6">
+            <label className="form-label">题号</label>
+            <input type="text" className="form-control" placeholder="如：17" value={questionNumber} onChange={e => setQuestionNumber(e.target.value)} />
           </div>
         </div>
 
